@@ -530,15 +530,12 @@ class Bcsend_Brevo_API {
 	}
 
 	/**
-	 * Create an email campaign in Brevo.
-	 *
-	 * @since 1.0.0
+	 * Build a Brevo email campaign payload.
 	 *
 	 * @param array $data Campaign data with keys: subject, htmlContent, recipients (listIds), name.
-	 *
-	 * @return array|WP_Error Created campaign data or WP_Error.
+	 * @return array Campaign request body.
 	 */
-	public function create_campaign( $data ) {
+	private function build_campaign_body( $data ) {
 		$html_content = isset( $data['htmlContent'] ) ? $data['htmlContent'] : '';
 
 		// Inject Brevo unsubscribe link if not already present.
@@ -576,7 +573,36 @@ class Bcsend_Brevo_API {
 			$campaign_body['replyTo'] = $reply_to_email;
 		}
 
+		return $campaign_body;
+	}
+
+	/**
+	 * Create an email campaign in Brevo.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param array $data Campaign data with keys: subject, htmlContent, recipients (listIds), name.
+	 *
+	 * @return array|WP_Error Created campaign data or WP_Error.
+	 */
+	public function create_campaign( $data ) {
+		$campaign_body = $this->build_campaign_body( $data );
+
 		return $this->request( 'POST', 'emailCampaigns', $campaign_body );
+	}
+
+	/**
+	 * Update an existing email campaign in Brevo.
+	 *
+	 * @param int   $brevo_campaign_id Brevo campaign ID.
+	 * @param array $data              Campaign data.
+	 * @return array|WP_Error Updated campaign data or WP_Error.
+	 */
+	public function update_campaign( $brevo_campaign_id, $data ) {
+		$endpoint      = sprintf( 'emailCampaigns/%d', (int) $brevo_campaign_id );
+		$campaign_body = $this->build_campaign_body( $data );
+
+		return $this->request( 'PUT', $endpoint, $campaign_body );
 	}
 
 	/**

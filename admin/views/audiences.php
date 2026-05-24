@@ -42,6 +42,13 @@ $query_types = array(
 	<div class="bcsend-audiences-section">
 		<div class="bcsend-section-header">
 			<h2><?php esc_html_e( 'Smart Segments', 'beacon-campaign-sender' ); ?></h2>
+			<div class="bcsend-section-header-actions">
+				<button type="button" class="button" id="bcsend-sync-brevo-lists">
+					<span class="dashicons dashicons-update"></span>
+					<?php esc_html_e( 'Sync Brevo Lists', 'beacon-campaign-sender' ); ?>
+				</button>
+				<span id="bcsend-sync-all-status" class="bcsend-inline-status"></span>
+			</div>
 		</div>
 
 		<table class="widefat fixed striped bcsend-segments-table">

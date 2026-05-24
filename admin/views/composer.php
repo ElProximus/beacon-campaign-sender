@@ -111,9 +111,13 @@ if ( ! empty( $social_posts ) ) {
 						<button type="button" class="button button-small" id="bcsend-save-snippet-btn" title="<?php esc_attr_e( 'Save selection as snippet', 'beacon-campaign-sender' ); ?>">
 							<?php esc_html_e( 'Save Snippet', 'beacon-campaign-sender' ); ?>
 						</button>
+						<button type="button" class="button button-small" id="bcsend-regenerate-html">
+							<?php esc_html_e( 'Regenerate HTML', 'beacon-campaign-sender' ); ?>
+						</button>
 						<button type="button" class="button button-small" id="bcsend-apply-html">
 							<?php esc_html_e( 'Apply', 'beacon-campaign-sender' ); ?>
 						</button>
+						<span id="bcsend-regen-html-status" class="bcsend-inline-status"></span>
 					</div>
 				</div>
 				<textarea id="bcsend-html-editor"
@@ -253,33 +257,6 @@ if ( ! empty( $social_posts ) ) {
 								class="large-text"
 								value="<?php echo $is_editing ? esc_attr( $campaign->preview_text ) : ''; ?>"
 								placeholder="<?php esc_attr_e( 'Text shown in email client before opening', 'beacon-campaign-sender' ); ?>" />
-					</div>
-
-					<?php
-					$bcsend_admin_email = (string) get_option( 'admin_email', '' );
-					$bcsend_site_host   = wp_parse_url( home_url(), PHP_URL_HOST );
-					if ( empty( $bcsend_site_host ) ) {
-						$bcsend_site_host = 'example.com';
-					}
-					$bcsend_reply_to_value = $is_editing && ! empty( $campaign->reply_to )
-						? (string) $campaign->reply_to
-						: $bcsend_admin_email;
-					?>
-					<div class="bcsend-field-group">
-						<label for="bcsend-reply-to"><?php esc_html_e( 'Reply-To', 'beacon-campaign-sender' ); ?></label>
-						<input type="email"
-								id="bcsend-reply-to"
-								class="large-text"
-								value="<?php echo esc_attr( $bcsend_reply_to_value ); ?>"
-								placeholder="<?php echo esc_attr( 'you@' . $bcsend_site_host ); ?>"
-								list="bcsend-reply-to-options" />
-						<datalist id="bcsend-reply-to-options">
-							<?php if ( '' !== $bcsend_admin_email ) : ?>
-								<option value="<?php echo esc_attr( $bcsend_admin_email ); ?>">
-							<?php endif; ?>
-							<option value="<?php echo esc_attr( 'info@' . $bcsend_site_host ); ?>">
-							<option value="<?php echo esc_attr( 'no-reply@' . $bcsend_site_host ); ?>">
-						</datalist>
 					</div>
 				</div>
 			</div>

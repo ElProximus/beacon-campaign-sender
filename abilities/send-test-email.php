@@ -98,6 +98,7 @@ function bcsend_ability_send_test_email( $input = array() ) {
 	$campaign_id  = isset( $input['campaign_id'] ) ? absint( $input['campaign_id'] ) : 0;
 	$subject      = isset( $input['subject'] ) ? sanitize_text_field( $input['subject'] ) : '';
 	$html_content = isset( $input['html_content'] ) ? bcsend_kses_email( $input['html_content'] ) : '';
+	$reply_to     = '';
 
 	if ( empty( $to_email ) || ! is_email( $to_email ) ) {
 		return new WP_Error( 'invalid_email', 'A valid to_email address is required.' );
@@ -107,7 +108,7 @@ function bcsend_ability_send_test_email( $input = array() ) {
 	if ( $campaign_id > 0 ) {
 		$table    = $wpdb->prefix . 'bcsend_campaigns';
 		$campaign = $wpdb->get_row(
-			$wpdb->prepare( "SELECT subject, html_content FROM {$table} WHERE id = %d", $campaign_id ),
+			$wpdb->prepare( "SELECT subject, html_content, reply_to FROM {$table} WHERE id = %d", $campaign_id ),
 			ARRAY_A
 		);
 
@@ -121,6 +122,8 @@ function bcsend_ability_send_test_email( $input = array() ) {
 		if ( empty( $html_content ) ) {
 			$html_content = $campaign['html_content'];
 		}
+
+		$reply_to = isset( $campaign['reply_to'] ) ? $campaign['reply_to'] : '';
 	}
 
 	if ( empty( $subject ) ) {
@@ -131,16 +134,15 @@ function bcsend_ability_send_test_email( $input = array() ) {
 		$html_content = '<html><body><h1>Test Email</h1><p>This is a test email from Beacon Campaign Sender.</p></body></html>';
 	}
 
-	$settings = get_option( 'bcsend_settings', array() );
-	$settings = Bcsend_Encryption::decrypt_settings( $settings );
+	$settings = Bcsend_Settings::get_settings();
 	$api_key  = isset( $settings['brevo_api_key'] ) ? $settings['brevo_api_key'] : '';
 
 	if ( empty( $api_key ) ) {
 		return new WP_Error( 'not_configured', 'Brevo API key is not configured.' );
 	}
 
-	$sender_name  = isset( $settings['brevo_sender_name'] ) ? $settings['brevo_sender_name'] : get_bloginfo( 'name' );
-	$sender_email = isset( $settings['brevo_sender_email'] ) ? $settings['brevo_sender_email'] : get_option( 'admin_email' );
+	$sender_name  = ! empty( $settings['brevo_sender_name'] ) ? $settings['brevo_sender_name'] : get_bloginfo( 'name' );
+	$sender_email = ! empty( $settings['brevo_sender_email'] ) ? $settings['brevo_sender_email'] : get_option( 'admin_email' );
 
 	$payload = array(
 		'sender'      => array(
@@ -153,6 +155,11 @@ function bcsend_ability_send_test_email( $input = array() ) {
 		'subject'     => $subject,
 		'htmlContent' => $html_content,
 	);
+
+	$reply_to_email = bcsend_get_campaign_reply_to( $reply_to );
+	if ( ! empty( $reply_to_email ) ) {
+		$payload['replyTo'] = array( 'email' => $reply_to_email );
+	}
 
 	$response = wp_remote_post(
 		'https://api.brevo.com/v3/smtp/email',

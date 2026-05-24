@@ -96,6 +96,7 @@ class Bcsend_Settings {
 		$sanitized['brevo_api_key']             = isset( $input['brevo_api_key'] ) ? sanitize_text_field( $input['brevo_api_key'] ) : '';
 		$sanitized['brevo_sender_name']         = isset( $input['brevo_sender_name'] ) ? sanitize_text_field( $input['brevo_sender_name'] ) : '';
 		$sanitized['brevo_sender_email']        = isset( $input['brevo_sender_email'] ) ? sanitize_email( $input['brevo_sender_email'] ) : '';
+		$sanitized['reply_to_email']            = isset( $input['reply_to_email'] ) ? sanitize_email( $input['reply_to_email'] ) : '';
 		$sanitized['default_subscriber_lists']  = $this->sanitize_integer_list(
 			isset( $input['default_subscriber_lists'] ) ? $input['default_subscriber_lists'] : array( 14 )
 		);
@@ -245,6 +246,7 @@ class Bcsend_Settings {
 			'brevo_api_key'                 => '',
 			'brevo_sender_name'             => '',
 			'brevo_sender_email'            => '',
+			'reply_to_email'                => '',
 			'push_mode'                     => 'auto',
 			'firebase_service_account_json' => '',
 			'firebase_project_id'           => '',

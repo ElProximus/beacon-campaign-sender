@@ -27,6 +27,7 @@ class Bcsend_Ajax_Campaigns {
 		add_action( 'wp_ajax_bcsend_regenerate_social', array( $this, 'ajax_regenerate_social' ) );
 		add_action( 'wp_ajax_bcsend_save_draft', array( $this, 'ajax_save_draft' ) );
 		add_action( 'wp_ajax_bcsend_approve_schedule', array( $this, 'ajax_approve_schedule' ) );
+		add_action( 'wp_ajax_bcsend_send_campaign_preview_email', array( $this, 'ajax_send_campaign_preview_email' ) );
 		add_action( 'wp_ajax_bcsend_get_campaigns', array( $this, 'ajax_get_campaigns' ) );
 		add_action( 'wp_ajax_bcsend_delete_campaign', array( $this, 'ajax_delete_campaign' ) );
 		add_action( 'wp_ajax_bcsend_revert_to_draft', array( $this, 'ajax_revert_to_draft' ) );
@@ -265,7 +266,6 @@ class Bcsend_Ajax_Campaigns {
 				'preview_text'        => isset( $_POST['preview_text'] ) ? sanitize_text_field( wp_unslash( $_POST['preview_text'] ) ) : '',
 				'html_content'        => isset( $_POST['html_content'] ) ? bcsend_kses_email( wp_unslash( $_POST['html_content'] ) ) : '',
 				'plain_text'          => isset( $_POST['plain_text'] ) ? sanitize_textarea_field( wp_unslash( $_POST['plain_text'] ) ) : '',
-				'reply_to'            => isset( $_POST['reply_to'] ) ? sanitize_email( wp_unslash( $_POST['reply_to'] ) ) : '',
 				'push_title'          => isset( $_POST['push_title'] ) ? sanitize_text_field( wp_unslash( $_POST['push_title'] ) ) : '',
 				'push_message'        => isset( $_POST['push_message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['push_message'] ) ) : '',
 				'send_email'          => isset( $_POST['send_email'] ) ? absint( $_POST['send_email'] ) : 1,
@@ -313,7 +313,6 @@ class Bcsend_Ajax_Campaigns {
 		$preview_text        = isset( $_POST['preview_text'] ) ? sanitize_text_field( wp_unslash( $_POST['preview_text'] ) ) : '';
 		$html_content        = isset( $_POST['html_content'] ) ? bcsend_kses_email( wp_unslash( $_POST['html_content'] ) ) : '';
 		$plain_text          = isset( $_POST['plain_text'] ) ? sanitize_textarea_field( wp_unslash( $_POST['plain_text'] ) ) : '';
-		$reply_to            = isset( $_POST['reply_to'] ) ? sanitize_email( wp_unslash( $_POST['reply_to'] ) ) : '';
 		$push_title          = isset( $_POST['push_title'] ) ? sanitize_text_field( wp_unslash( $_POST['push_title'] ) ) : '';
 		$push_message        = isset( $_POST['push_message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['push_message'] ) ) : '';
 		$send_email          = isset( $_POST['send_email'] ) ? absint( $_POST['send_email'] ) : 1;
@@ -390,7 +389,6 @@ class Bcsend_Ajax_Campaigns {
 				'preview_text'        => $preview_text,
 				'html_content'        => $html_content,
 				'plain_text'          => $plain_text,
-				'reply_to'            => $reply_to,
 				'push_title'          => $push_title,
 				'push_message'        => $push_message,
 				'send_email'          => $send_email,
@@ -444,6 +442,47 @@ class Bcsend_Ajax_Campaigns {
 				'status'  => 'scheduled',
 			)
 		);
+	}
+
+	/**
+	 * AJAX: Send a campaign preview email through Brevo transactional email.
+	 *
+	 * @return void
+	 */
+	public function ajax_send_campaign_preview_email() {
+		check_ajax_referer( 'bcsend_nonce', 'nonce' );
+
+		if ( ! current_user_can( 'manage_bcsend' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'beacon-campaign-sender' ) ) );
+		}
+
+		$to_email     = isset( $_POST['to_email'] ) ? sanitize_email( wp_unslash( $_POST['to_email'] ) ) : '';
+		$campaign_id  = isset( $_POST['campaign_id'] ) ? absint( $_POST['campaign_id'] ) : 0;
+		$subject      = isset( $_POST['subject'] ) ? sanitize_text_field( wp_unslash( $_POST['subject'] ) ) : '';
+		$html_content = isset( $_POST['html_content'] ) ? bcsend_kses_email( wp_unslash( $_POST['html_content'] ) ) : '';
+
+		if ( empty( $to_email ) || ! is_email( $to_email ) ) {
+			wp_send_json_error( array( 'message' => __( 'Valid email address required.', 'beacon-campaign-sender' ) ) );
+		}
+
+		if ( empty( $html_content ) ) {
+			wp_send_json_error( array( 'message' => __( 'Generate campaign content first.', 'beacon-campaign-sender' ) ) );
+		}
+
+		$result = bcsend_ability_send_test_email(
+			array(
+				'to_email'     => $to_email,
+				'campaign_id'  => $campaign_id,
+				'subject'      => $subject,
+				'html_content' => $html_content,
+			)
+		);
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		wp_send_json_success( $result );
 	}
 
 	/**

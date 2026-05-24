@@ -1216,6 +1216,41 @@
                 self.updateSyncIndicator();
             });
 
+            // Regenerate the HTML email body from the current content context.
+            $('#bcsend-regenerate-html').on('click', function() {
+                var $btn = $(this);
+                var context = $.trim($('#bcsend-subject').val()) + "\n" +
+                    $.trim($('#bcsend-plain-text').val()) + "\n" +
+                    $.trim($('#bcsend-campaign-prompt').val());
+
+                if (!$.trim(context)) {
+                    Bcsend.notify('No content context for HTML regeneration.', 'warning');
+                    return;
+                }
+
+                Bcsend.loading($btn, true);
+                $('#bcsend-regen-html-status').text('Regenerating...');
+
+                Bcsend.ajax('bcsend_regenerate_html', {
+                    campaign_id: self.campaignId || '',
+                    prompt: context
+                }, function(response) {
+                    Bcsend.loading($btn, false);
+                    $('#bcsend-regen-html-status').text('');
+
+                    if (response.success && response.data && response.data.html_content) {
+                        $('#bcsend-html-editor').val(response.data.html_content);
+                        self.updateEmailPreview(response.data.html_content);
+                        self.htmlSynced = true;
+                        self.updateSyncIndicator();
+                        Bcsend.notify('HTML regenerated.', 'success');
+                    } else {
+                        var errMsg = (response.data && response.data.message) ? response.data.message : 'Failed to regenerate HTML.';
+                        Bcsend.notify(errMsg, 'error');
+                    }
+                });
+            });
+
             // Track edits in the code editor.
             $('#bcsend-html-editor').on('input', function() {
                 self.htmlSynced = false;
@@ -1393,7 +1428,6 @@
                 preview_text:     $('#bcsend-preview-text').val(),
                 html_content:     $('#bcsend-html-editor').val(),
                 plain_text:       $('#bcsend-plain-text').val(),
-                reply_to:         $('#bcsend-reply-to').val(),
                 push_title:       $('#bcsend-push-title').val(),
                 push_message:     $('#bcsend-push-message').val(),
                 send_email:       $('#bcsend-send-email').is(':checked') ? 1 : 0,
@@ -1454,8 +1488,9 @@
                 }
 
                 Bcsend.loading($btn, true);
-                Bcsend.ajax('bcsend_send_test_email', {
+                Bcsend.ajax('bcsend_send_campaign_preview_email', {
                     to_email: bcsendAdmin.adminEmail || '',
+                    campaign_id: self.campaignId || '',
                     subject: '[TEST] ' + ($('#bcsend-subject').val() || 'Beacon Campaign Sender Test'),
                     html_content: htmlContent
                 }, function(response) {
@@ -1570,7 +1605,6 @@
                     }
 
                     if (data.name) { $('#bcsend-campaign-name').val(data.name); }
-                    if (data.reply_to) { $('#bcsend-reply-to').val(data.reply_to); }
 
                     if (data.send_email !== undefined) {
                         $('#bcsend-send-email').prop('checked', parseInt(data.send_email, 10) !== 0).trigger('change');

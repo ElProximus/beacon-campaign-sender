@@ -114,6 +114,21 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 				</tr>
 				<tr>
 					<th scope="row">
+						<label for="bcsend-reply-to-email"><?php esc_html_e( 'Default Reply-To Address', 'beacon-campaign-sender' ); ?></label>
+					</th>
+					<td>
+						<input type="email"
+								id="bcsend-reply-to-email"
+								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[reply_to_email]"
+								value="<?php echo esc_attr( $settings['reply_to_email'] ); ?>"
+								class="regular-text" />
+						<p class="description">
+							<?php echo esc_html__( "This Reply-To applies only to campaigns and test emails sent by Beacon Campaign Sender. It does not change the Reply-To for other WordPress email, even when Beacon's WordPress Email Routing delivers that mail, each of those keeps its own Reply-To. Leave blank to reply to the Sender Email (From) above.", 'beacon-campaign-sender' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
 						<label for="bcsend-default-subscriber-lists"><?php esc_html_e( 'Default Subscriber Lists', 'beacon-campaign-sender' ); ?></label>
 					</th>
 					<td>

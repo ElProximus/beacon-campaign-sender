@@ -4,11 +4,11 @@ Tags: email, newsletter, push notifications, ai, marketing
 Requires at least: 5.8
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Email, push notification, and social campaign management for WordPress with Brevo delivery, Firebase Cloud Messaging push notifications and Zernio social publishing,  with AI-assisted content generation. Can also route all WordPress email through Brevo when enabled.
+AI-assisted email, push notification, and social campaign management for WordPress via Brevo, Firebase, and Zernio.
 
 == Description ==
 
@@ -139,6 +139,12 @@ Beacon Campaign Sender stores subscriber sign-up records and email logs locally 
 The plugin integrates with WordPress personal data exporters and erasers for locally stored subscriber and email log records.
 
 == Changelog ==
+
+= 1.0.2 =
+- Reply-To moved from the campaign composer to plugin Settings, with optional per-campaign override available to automations.
+- Added "Sync Brevo Lists" button to the Audiences screen and "Regenerate HTML" button to the campaign composer.
+- Scheduled sends now create or update the Brevo campaign at send time; composer preview emails use the same direct Brevo path for accurate Reply-To handling.
+- Shortened the readme short description to meet the WordPress.org 150-character limit.
 
 = 1.0.1 =
 - Keeps the Abilities Bridge integration card visible for discoverability and populates abilities only after the Bridge integration setting is enabled.

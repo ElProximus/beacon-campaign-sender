@@ -228,43 +228,122 @@ class Bcsend_Campaign_Sender {
 		}
 
 		$brevo_campaign_id = ! empty( $campaign->brevo_campaign_id ) ? (int) $campaign->brevo_campaign_id : 0;
+		$snapshot          = ! empty( $campaign->send_config_snapshot )
+			? json_decode( $campaign->send_config_snapshot, true )
+			: array();
 
-		// Create the Brevo campaign if one does not yet exist.
-		if ( empty( $brevo_campaign_id ) ) {
-			$snapshot = ! empty( $campaign->send_config_snapshot )
-				? json_decode( $campaign->send_config_snapshot, true )
-				: array();
+		$segment = ! empty( $campaign->segment_id )
+			? Bcsend_Segment_Engine::get_segment( $campaign->segment_id )
+			: null;
 
-			$segment = ! empty( $campaign->segment_id )
-				? Bcsend_Segment_Engine::get_segment( $campaign->segment_id )
-				: null;
+		if ( $segment && empty( $segment->brevo_list_id ) ) {
+			$sync_result = Bcsend_Segment_Engine::sync_to_brevo( $segment->id );
 
-			$list_ids = array();
-			if ( $segment && ! empty( $segment->brevo_list_id ) ) {
-				$list_ids[] = (int) $segment->brevo_list_id;
+			if ( ! is_wp_error( $sync_result ) ) {
+				$segment = Bcsend_Segment_Engine::get_segment( $campaign->segment_id );
 			}
+		}
 
-			$create_data = array(
-				'name'        => ! empty( $campaign->name ) ? $campaign->name : 'Campaign ' . $campaign_id,
-				'subject'     => ! empty( $campaign->subject ) ? $campaign->subject : '',
-				'htmlContent' => isset( $snapshot['html_content'] ) && '' !== $snapshot['html_content']
-					? $snapshot['html_content']
-					: ( ! empty( $campaign->html_content ) ? $campaign->html_content : '' ),
-				'recipients'  => array( 'listIds' => $list_ids ),
-				'replyTo'     => ! empty( $campaign->reply_to ) ? $campaign->reply_to : '',
+		$list_ids = array();
+		if ( $segment && ! empty( $segment->brevo_list_id ) ) {
+			$list_ids[] = (int) $segment->brevo_list_id;
+		}
+
+		if ( empty( $list_ids ) ) {
+			$error_message = 'Segment has no Brevo contact list. Sync the segment first from the Audiences page.';
+
+			Bcsend_Logger::log(
+				'campaign_send',
+				'Email failed: ' . $error_message,
+				wp_json_encode(
+					array(
+						'campaign_id' => $campaign_id,
+						'email'       => 'failed',
+						'reason'      => $error_message,
+					)
+				)
 			);
 
-			$create_response = $brevo->create_campaign( $create_data );
+			$wpdb->update(
+				$table,
+				array(
+					'email_status'  => 'failed',
+					'attempt_count' => (int) $campaign->attempt_count + 1,
+					'last_error'    => $error_message,
+				),
+				array( 'id' => $campaign_id ),
+				array( '%s', '%d', '%s' ),
+				array( '%d' )
+			);
+			return;
+		}
 
-			if ( is_wp_error( $create_response ) ) {
+		$campaign_data = array(
+			'name'        => ! empty( $campaign->name ) ? $campaign->name : 'Campaign ' . $campaign_id,
+			'subject'     => ! empty( $campaign->subject ) ? $campaign->subject : '',
+			'htmlContent' => isset( $snapshot['html_content'] ) && '' !== $snapshot['html_content']
+				? $snapshot['html_content']
+				: ( ! empty( $campaign->html_content ) ? $campaign->html_content : '' ),
+			'recipients'  => array( 'listIds' => $list_ids ),
+			'replyTo'     => bcsend_get_campaign_reply_to( isset( $campaign->reply_to ) ? $campaign->reply_to : '' ),
+		);
+
+		if ( empty( $brevo_campaign_id ) ) {
+			$campaign_response = $brevo->create_campaign( $campaign_data );
+			$campaign_action   = 'create';
+		} else {
+			$campaign_response = $brevo->update_campaign( $brevo_campaign_id, $campaign_data );
+			$campaign_action   = 'update';
+		}
+
+		if ( is_wp_error( $campaign_response ) ) {
+			$error_message = sprintf(
+				'Failed to %s Brevo campaign: %s',
+				$campaign_action,
+				$campaign_response->get_error_message()
+			);
+
+			Bcsend_Logger::log(
+				'campaign_send',
+				'Email failed: ' . $error_message,
+				wp_json_encode(
+					array(
+						'campaign_id'       => $campaign_id,
+						'brevo_campaign_id' => $brevo_campaign_id,
+						'email'             => 'failed',
+						'reason'            => $error_message,
+					)
+				)
+			);
+
+			$wpdb->update(
+				$table,
+				array(
+					'email_status'  => 'failed',
+					'attempt_count' => (int) $campaign->attempt_count + 1,
+					'last_error'    => $error_message,
+				),
+				array( 'id' => $campaign_id ),
+				array( '%s', '%d', '%s' ),
+				array( '%d' )
+			);
+			return;
+		}
+
+		if ( empty( $brevo_campaign_id ) ) {
+			$brevo_campaign_id = isset( $campaign_response['id'] ) ? (int) $campaign_response['id'] : 0;
+
+			if ( empty( $brevo_campaign_id ) ) {
+				$error_message = 'Brevo campaign was created but no campaign ID was returned.';
+
 				Bcsend_Logger::log(
 					'campaign_send',
-					'Email failed: Failed to create Brevo campaign: ',
+					'Email failed: ' . $error_message,
 					wp_json_encode(
 						array(
 							'campaign_id' => $campaign_id,
 							'email'       => 'failed',
-							'reason'      => 'Failed to create Brevo campaign: ' . $create_response->get_error_message(),
+							'reason'      => $error_message,
 						)
 					)
 				);
@@ -274,7 +353,7 @@ class Bcsend_Campaign_Sender {
 					array(
 						'email_status'  => 'failed',
 						'attempt_count' => (int) $campaign->attempt_count + 1,
-						'last_error'    => $create_response->get_error_message(),
+						'last_error'    => $error_message,
 					),
 					array( 'id' => $campaign_id ),
 					array( '%s', '%d', '%s' ),
@@ -282,8 +361,6 @@ class Bcsend_Campaign_Sender {
 				);
 				return;
 			}
-
-			$brevo_campaign_id = isset( $create_response['id'] ) ? (int) $create_response['id'] : 0;
 
 			$wpdb->update(
 				$table,

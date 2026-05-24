@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Beacon Campaign Sender
  * Description: Email and push notification campaign manager with AI content generation, Brevo integration, and Firebase push delivery.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Joe Campbell
  * Author URI: https://aisystemadmin.com/joe-campbell/
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants.
-define( 'BCSEND_VERSION', '1.0.1' );
+define( 'BCSEND_VERSION', '1.0.2' );
 define( 'BCSEND_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BCSEND_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'BCSEND_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
@@ -132,6 +132,28 @@ function bcsend_sanitize_json_string( $raw, $default = '{}', $mode = 'text' ) {
 	}
 
 	return wp_json_encode( bcsend_sanitize_json_value( $decoded, $mode ) );
+}
+
+/**
+ * Resolve the campaign Reply-To using campaign override, settings default, then sender fallback.
+ *
+ * Empty return values are intentional: Brevo campaign creation falls back to
+ * sender email, and transactional preview emails omit replyTo to let replies
+ * use the From address.
+ *
+ * @param string $campaign_reply_to Optional campaign-level Reply-To.
+ * @return string Valid Reply-To email or empty string.
+ */
+function bcsend_get_campaign_reply_to( $campaign_reply_to = '' ) {
+	$campaign_reply_to = sanitize_email( (string) $campaign_reply_to );
+	if ( ! empty( $campaign_reply_to ) && is_email( $campaign_reply_to ) ) {
+		return $campaign_reply_to;
+	}
+
+	$settings = class_exists( 'Bcsend_Settings' ) ? Bcsend_Settings::get_settings() : array();
+	$reply_to = isset( $settings['reply_to_email'] ) ? sanitize_email( $settings['reply_to_email'] ) : '';
+
+	return ! empty( $reply_to ) && is_email( $reply_to ) ? $reply_to : '';
 }
 
 /**

@@ -194,7 +194,8 @@ function bcsend_ability_save_draft( $input = array() ) {
 	$preview_text     = isset( $input['preview_text'] ) ? sanitize_text_field( $input['preview_text'] ) : '';
 	$html_content     = isset( $input['html_content'] ) ? bcsend_kses_email( $input['html_content'] ) : '';
 	$plain_text       = isset( $input['plain_text'] ) ? sanitize_textarea_field( $input['plain_text'] ) : '';
-	$reply_to         = isset( $input['reply_to'] ) ? sanitize_email( $input['reply_to'] ) : '';
+	$has_reply_to     = isset( $input['reply_to'] );
+	$reply_to         = $has_reply_to ? sanitize_email( $input['reply_to'] ) : '';
 	$push_title       = isset( $input['push_title'] ) ? sanitize_text_field( $input['push_title'] ) : '';
 	$push_message     = isset( $input['push_message'] ) ? sanitize_textarea_field( $input['push_message'] ) : '';
 	$send_email       = isset( $input['send_email'] ) ? absint( $input['send_email'] ) : 1;
@@ -244,7 +245,6 @@ function bcsend_ability_save_draft( $input = array() ) {
 		'preview_text'     => $preview_text,
 		'html_content'     => $html_content,
 		'plain_text'       => $plain_text,
-		'reply_to'         => $reply_to,
 		'push_title'       => $push_title,
 		'push_message'     => $push_message,
 		'send_email'       => $send_email,
@@ -260,7 +260,12 @@ function bcsend_ability_save_draft( $input = array() ) {
 		'status'           => 'draft',
 	);
 
-	$format = array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' );
+	$format = array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' );
+
+	if ( $has_reply_to ) {
+		$data['reply_to'] = $reply_to;
+		$format[]         = '%s';
+	}
 
 	// Only include scheduled_at when set; empty strings break MySQL strict
 	// mode on datetime columns (the DEFAULT NULL handles missing values).

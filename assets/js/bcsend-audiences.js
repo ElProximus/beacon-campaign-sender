@@ -29,6 +29,43 @@
             this.bindSegmentForm();
             this.bindSegmentActions();
             this.bindCreateToggle();
+            this.bindSyncAll();
+        },
+
+        /**
+         * Sync all segments, including importing Brevo lists as
+         * brevo_list-type segments. Reloads on success so the
+         * server-rendered segment table reflects newly imported lists.
+         */
+        bindSyncAll: function() {
+            $('#bcsend-sync-brevo-lists').on('click', function() {
+                var $btn = $(this);
+                var $status = $('#bcsend-sync-all-status');
+
+                if ($btn.data('syncing')) {
+                    return;
+                }
+                $btn.data('syncing', true);
+                Bcsend.loading($btn, true);
+                $status.text('Syncing Brevo lists...');
+
+                Bcsend.ajax('bcsend_sync_all_segments', {}, function(response) {
+                    Bcsend.loading($btn, false);
+                    $btn.data('syncing', false);
+                    $status.text('');
+
+                    if (response.success) {
+                        Bcsend.notify(
+                            (response.data && response.data.message) || 'Brevo lists synced.',
+                            'success'
+                        );
+                        window.location.reload();
+                    } else {
+                        var errMsg = (response.data && response.data.message) ? response.data.message : 'Sync failed.';
+                        Bcsend.notify(errMsg, 'error');
+                    }
+                });
+            });
         },
 
         /* ============================================================

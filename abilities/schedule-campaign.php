@@ -173,13 +173,13 @@ function bcsend_ability_schedule_campaign( $input = array() ) {
 		'frozen_at'          => current_time( 'mysql', true ),
 	);
 
-	// Create the Brevo campaign if not yet created.
+	// Validate/sync the Brevo list now, but defer campaign create/update until send time.
 	$brevo_campaign_id = ! empty( $campaign->brevo_campaign_id ) ? (int) $campaign->brevo_campaign_id : 0;
 
-	if ( empty( $brevo_campaign_id ) ) {
+	if ( ! empty( $campaign->send_email ) && ! empty( $campaign->segment_id ) ) {
 		$brevo = new Bcsend_Brevo_API();
 
-		if ( $brevo->is_configured() && ! empty( $campaign->segment_id ) ) {
+		if ( $brevo->is_configured() ) {
 			$segment = Bcsend_Segment_Engine::get_segment( $campaign->segment_id );
 
 			// Auto-sync the segment to Brevo if it has no list yet.
@@ -200,24 +200,6 @@ function bcsend_ability_schedule_campaign( $input = array() ) {
 
 			if ( empty( $list_ids ) ) {
 				return new WP_Error( 'no_brevo_list', 'Segment has no Brevo contact list. Sync the segment first from the Audiences page.' );
-			}
-
-			$create_response = $brevo->create_campaign(
-				array(
-					'name'        => $campaign->name,
-					'subject'     => $campaign->subject,
-					'htmlContent' => $campaign->html_content,
-					'recipients'  => array( 'listIds' => $list_ids ),
-					'replyTo'     => ! empty( $campaign->reply_to ) ? $campaign->reply_to : '',
-				)
-			);
-
-			if ( is_wp_error( $create_response ) ) {
-				return new WP_Error( 'brevo_campaign_failed', 'Failed to create Brevo campaign: ' . $create_response->get_error_message() );
-			}
-
-			if ( isset( $create_response['id'] ) ) {
-				$brevo_campaign_id = (int) $create_response['id'];
 			}
 		}
 	}

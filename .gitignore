@@ -1,0 +1,13 @@
+# WP.org SVN working copy lives inside this dir but is not part of the Git repo.
+svn-wp/
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+*~
+
+# Local dev-only files (not part of releases)
+WORDPRESS-REVIEW-RESPONSE.md
+phpcs.xml.dist

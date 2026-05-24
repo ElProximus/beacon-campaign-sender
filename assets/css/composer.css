@@ -1,0 +1,1191 @@
+/**
+ * Beacon Campaign Sender - Composer Styles
+ *
+ * Single-screen campaign editor with split preview/code left panel
+ * and campaign fields right panel.
+ *
+ * @package Bcsend_Plugin
+ * @since   2.0.0
+ */
+
+/* ============================================================
+   1. Composer Wrapper
+   ============================================================ */
+
+.bcsend-composer-wrap {
+    max-width: none;
+    margin-right: 0;
+}
+
+/* ============================================================
+   2. Two-Panel Layout
+   ============================================================ */
+
+.bcsend-panels {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.bcsend-panel-left {
+    flex: 3;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.bcsend-panel-right {
+    flex: 2;
+    min-width: 300px;
+    max-width: 460px;
+}
+
+@media screen and (max-width: 1100px) {
+    .bcsend-panels {
+        flex-direction: column;
+    }
+
+    .bcsend-panel-left {
+        flex: none;
+        width: 100%;
+        position: static;
+        max-height: 70vh;
+    }
+
+    .bcsend-panel-right {
+        flex: none;
+        width: 100%;
+        max-width: none;
+    }
+}
+
+/* ============================================================
+   3. Email Preview (top half of left panel)
+   ============================================================ */
+
+.bcsend-preview-container {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px 4px 0 0;
+    overflow: hidden;
+}
+
+.bcsend-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1d2327;
+    background: #f6f7f7;
+    border-bottom: 1px solid #c3c4c7;
+    flex-shrink: 0;
+}
+
+.bcsend-email-preview-iframe {
+    width: 100%;
+    min-height: 300px;
+    border: none;
+    display: block;
+    background: #fff;
+}
+
+/* ============================================================
+   4. HTML Code Editor (bottom half of left panel)
+   ============================================================ */
+
+.bcsend-code-container {
+    flex: 1;
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #c3c4c7;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    overflow: hidden;
+}
+
+.bcsend-code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #d4d4d4;
+    background: #2c3338;
+    flex-shrink: 0;
+}
+
+.bcsend-code-editor {
+    flex: 1;
+    width: 100%;
+    min-height: 120px;
+    padding: 10px 12px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border: none;
+    resize: none;
+    box-sizing: border-box;
+    tab-size: 2;
+}
+
+.bcsend-code-editor:focus {
+    outline: none;
+}
+
+/* ============================================================
+   5. Sync Indicator
+   ============================================================ */
+
+.bcsend-sync-indicator {
+    font-size: 11px;
+    font-weight: 400;
+    color: #50575e;
+}
+
+.bcsend-sync-indicator.is-synced {
+    color: #00a32a;
+}
+
+.bcsend-sync-indicator.is-unsynced {
+    color: #dba617;
+}
+
+/* ============================================================
+   6. Field Groups (right panel)
+   ============================================================ */
+
+.bcsend-field-group {
+    margin-bottom: 14px;
+}
+
+.bcsend-field-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1d2327;
+    margin-bottom: 3px;
+}
+
+.bcsend-field-group input[type="text"],
+.bcsend-field-group input[type="email"],
+.bcsend-field-group input[type="date"],
+.bcsend-field-group input[type="time"],
+.bcsend-field-group textarea,
+.bcsend-field-group select {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    border: 1px solid #8c8f94;
+    border-radius: 3px;
+    background: #fff;
+    color: #2c3338;
+    box-sizing: border-box;
+}
+
+.bcsend-field-group input:focus,
+.bcsend-field-group textarea:focus,
+.bcsend-field-group select:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: none;
+}
+
+.bcsend-field-group textarea {
+    resize: vertical;
+}
+
+.bcsend-field-group .description,
+.bcsend-italic {
+    font-size: 11px;
+    font-style: italic;
+    color: #8c8f94;
+    margin-top: 3px;
+}
+
+/* ============================================================
+   7. Product Picker
+   ============================================================ */
+
+.bcsend-product-search-wrap {
+    position: relative;
+}
+
+.bcsend-product-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.bcsend-product-results.is-open {
+    display: block;
+}
+
+.bcsend-product-result-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.bcsend-product-result-item:last-child {
+    border-bottom: none;
+}
+
+.bcsend-product-result-item:hover {
+    background: #f0f6fc;
+}
+
+.bcsend-product-result-item img {
+    width: 32px;
+    height: 32px;
+    object-fit: cover;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.bcsend-product-result-title {
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.bcsend-product-result-price {
+    color: #50575e;
+    font-size: 11px;
+}
+
+.bcsend-product-no-results {
+    padding: 10px;
+    text-align: center;
+    color: #8c8f94;
+    font-size: 12px;
+}
+
+/* ============================================================
+   8. Selected Product Card
+   ============================================================ */
+
+.bcsend-selected-product {
+    margin-top: 6px;
+}
+
+.bcsend-selected-product-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: #f0f6fc;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+}
+
+.bcsend-product-thumb {
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.bcsend-selected-product-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.bcsend-selected-product-info strong {
+    display: block;
+    font-size: 12px;
+    color: #1d2327;
+}
+
+.bcsend-selected-product-info span {
+    font-size: 11px;
+    color: #50575e;
+}
+
+/* ============================================================
+   9. Generate Row
+   ============================================================ */
+
+.bcsend-generate-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.bcsend-inline-status {
+    font-size: 12px;
+    color: #50575e;
+}
+
+/* ============================================================
+   10. Push Notification Section
+   ============================================================ */
+
+.bcsend-push-section h3 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 10px;
+    padding-top: 14px;
+    border-top: 1px solid #f0f0f1;
+    color: #1d2327;
+}
+
+.bcsend-push-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+.bcsend-push-toggle input[type="checkbox"] {
+    margin: 0;
+}
+
+.bcsend-push-preview-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.bcsend-push-inputs {
+    flex: 1;
+    min-width: 0;
+}
+
+@media screen and (max-width: 600px) {
+    .bcsend-push-preview-row {
+        flex-direction: column;
+    }
+}
+
+/* ============================================================
+   11. Phone Mockup
+   ============================================================ */
+
+.bcsend-phone-mockup {
+    width: 160px;
+    flex-shrink: 0;
+    background: #000;
+    border-radius: 20px;
+    padding: 6px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+.bcsend-phone-notch {
+    width: 50px;
+    height: 14px;
+    background: #000;
+    border-radius: 0 0 8px 8px;
+    margin: 0 auto;
+}
+
+.bcsend-phone-screen {
+    background: #f2f2f7;
+    border-radius: 16px;
+    overflow: hidden;
+    min-height: 200px;
+    padding: 6px;
+}
+
+.bcsend-push-notification-preview {
+    display: flex;
+    gap: 6px;
+    background: #fff;
+    border-radius: 8px;
+    padding: 8px;
+    margin-top: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.bcsend-push-app-icon {
+    width: 20px;
+    height: 20px;
+    background: #2271b1;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.bcsend-push-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.bcsend-push-preview-title {
+    display: block;
+    font-weight: 700;
+    font-size: 10px;
+    color: #1c1c1e;
+    margin-bottom: 1px;
+    word-wrap: break-word;
+}
+
+.bcsend-push-preview-message {
+    display: block;
+    font-size: 9px;
+    color: #3c3c43;
+    line-height: 1.3;
+    word-wrap: break-word;
+}
+
+/* ============================================================
+   12. Character Counter
+   ============================================================ */
+
+.bcsend-char-counter {
+    display: block;
+    text-align: right;
+    font-size: 10px;
+    color: #8c8f94;
+    margin-top: 2px;
+}
+
+.bcsend-char-counter.warning {
+    color: #d63638;
+    font-weight: 600;
+}
+
+/* ============================================================
+   13. Schedule Row
+   ============================================================ */
+
+.bcsend-schedule-row .bcsend-schedule-inputs {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.bcsend-schedule-row input[type="date"],
+.bcsend-schedule-row input[type="time"] {
+    flex: 1;
+}
+
+.bcsend-tz-label {
+    font-size: 12px;
+    color: #646970;
+    white-space: nowrap;
+}
+
+/* ============================================================
+   14. Sticky Bottom Bar
+   ============================================================ */
+
+.bcsend-composer-bottom-bar {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    margin-top: 20px;
+}
+
+.bcsend-bottom-bar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #fff;
+    border-top: 1px solid #c3c4c7;
+    box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.bcsend-bottom-bar-inner .bcsend-inline-status {
+    margin-right: auto;
+}
+
+/* ============================================================
+   15. Code Header Actions
+   ============================================================ */
+
+.bcsend-code-header-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+/* ============================================================
+   16. Content Library
+   ============================================================ */
+
+.bcsend-content-library {
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    margin-bottom: 14px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.bcsend-cl-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1d2327;
+    background: #f6f7f7;
+    border-bottom: 1px solid #c3c4c7;
+}
+
+.bcsend-cl-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    color: #50575e;
+    line-height: 1;
+}
+
+.bcsend-cl-toggle .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.bcsend-cl-body {
+    padding: 0;
+}
+
+/* --- Tabs --- */
+
+.bcsend-cl-tabs {
+    display: flex;
+    border-bottom: 1px solid #c3c4c7;
+    background: #f9f9f9;
+}
+
+.bcsend-cl-tab {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #50575e;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    text-align: center;
+}
+
+.bcsend-cl-tab:hover {
+    color: #1d2327;
+}
+
+.bcsend-cl-tab.is-active {
+    color: #2271b1;
+    border-bottom-color: #2271b1;
+    font-weight: 600;
+}
+
+/* --- Unified Selected Content --- */
+
+.bcsend-cl-all-selected {
+    display: none;
+    padding: 8px 12px;
+    border-bottom: 1px solid #c3c4c7;
+    background: #f0f6fc;
+}
+
+.bcsend-cl-sel-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid #dce5f0;
+    font-size: 12px;
+}
+
+.bcsend-cl-sel-item:last-child {
+    border-bottom: none;
+}
+
+.bcsend-cl-sel-thumb {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bcsend-cl-sel-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.bcsend-cl-sel-thumb .dashicons {
+    font-size: 18px;
+    color: #8c8f94;
+}
+
+.bcsend-cl-sel-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.bcsend-cl-sel-name {
+    display: block;
+    font-weight: 600;
+    color: #1d2327;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.bcsend-cl-sel-meta {
+    display: block;
+    font-size: 10px;
+    color: #50575e;
+    line-height: 1.3;
+}
+
+.bcsend-cl-sel-remove {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    color: #8c8f94;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.bcsend-cl-sel-remove:hover {
+    color: #d63638;
+    background: #fce4e4;
+}
+
+/* --- Panels --- */
+
+.bcsend-cl-panel {
+    display: none;
+    padding: 12px;
+}
+
+.bcsend-cl-panel.is-active {
+    display: block;
+}
+
+/* --- Search Row --- */
+
+.bcsend-cl-search-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.bcsend-cl-search {
+    flex: 1;
+    padding: 6px 8px;
+    font-size: 13px;
+    border: 1px solid #8c8f94;
+    border-radius: 3px;
+    background: #fff;
+    color: #2c3338;
+    box-sizing: border-box;
+}
+
+.bcsend-cl-search:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: none;
+}
+
+.bcsend-cl-type-select {
+    width: 120px;
+    padding: 6px 8px;
+    font-size: 13px;
+    border: 1px solid #8c8f94;
+    border-radius: 3px;
+}
+
+/* --- Layout Options --- */
+
+.bcsend-cl-layout-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.bcsend-cl-layout-option {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: #50575e;
+    cursor: pointer;
+}
+
+.bcsend-cl-layout-option input[type="radio"] {
+    margin: 0;
+}
+
+/* --- Results List --- */
+
+.bcsend-cl-results {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.bcsend-cl-results:empty {
+    display: none;
+}
+
+.bcsend-cl-result-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    border-bottom: 1px solid #f0f0f1;
+    transition: background 0.1s;
+    position: relative;
+}
+
+.bcsend-cl-result-item:last-child {
+    border-bottom: none;
+}
+
+.bcsend-cl-result-item:hover {
+    background: #f0f6fc;
+}
+
+.bcsend-cl-result-item.is-selected {
+    background: #e8f0fe;
+}
+
+.bcsend-cl-result-item.is-selected .bcsend-cl-check {
+    opacity: 1;
+    color: #2271b1;
+}
+
+.bcsend-cl-result-thumb {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #f0f0f1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bcsend-cl-result-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.bcsend-cl-result-thumb .dashicons {
+    font-size: 20px;
+    color: #8c8f94;
+}
+
+.bcsend-cl-result-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.bcsend-cl-result-title {
+    font-weight: 600;
+    color: #1d2327;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bcsend-cl-result-meta {
+    font-size: 11px;
+    color: #50575e;
+    margin-top: 1px;
+}
+
+.bcsend-cl-check {
+    opacity: 0;
+    font-size: 18px;
+    flex-shrink: 0;
+    transition: opacity 0.15s;
+}
+
+.bcsend-cl-no-results {
+    padding: 16px;
+    text-align: center;
+    color: #8c8f94;
+    font-size: 12px;
+}
+
+/* --- Selected Chips --- */
+
+.bcsend-cl-selected-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.bcsend-cl-selected-items:empty {
+    display: none;
+}
+
+.bcsend-cl-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: #e8f0fe;
+    border: 1px solid #c3d6f0;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #1d2327;
+}
+
+.bcsend-cl-chip-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    color: #50575e;
+    padding: 0;
+}
+
+.bcsend-cl-chip-remove:hover {
+    color: #d63638;
+}
+
+.bcsend-cl-chip-image {
+    padding: 2px 8px 2px 2px;
+}
+
+.bcsend-cl-chip-image img {
+    width: 24px;
+    height: 24px;
+    object-fit: cover;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+
+/* --- Insert Button --- */
+
+.bcsend-cl-insert-btn {
+    width: 100%;
+}
+
+/* --- Media Tab --- */
+
+.bcsend-cl-media-actions {
+    margin-bottom: 12px;
+}
+
+.bcsend-cl-media-actions .dashicons {
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+.bcsend-cl-media-preview {
+    margin-bottom: 10px;
+    max-height: 150px;
+    overflow: hidden;
+    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+}
+
+.bcsend-cl-media-preview img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.bcsend-cl-media-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.bcsend-cl-media-fields label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #1d2327;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.bcsend-cl-media-fields select {
+    padding: 6px 8px;
+    font-size: 13px;
+    border: 1px solid #8c8f94;
+    border-radius: 3px;
+}
+
+/* --- Snippets Tab --- */
+
+.bcsend-cl-snippet-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid #f0f0f1;
+    font-size: 12px;
+}
+
+.bcsend-cl-snippet-item:last-child {
+    border-bottom: none;
+}
+
+.bcsend-cl-snippet-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.bcsend-cl-snippet-info strong {
+    color: #1d2327;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bcsend-cl-snippet-cat {
+    font-size: 10px;
+    color: #8c8f94;
+    background: #f0f0f1;
+    padding: 2px 6px;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.bcsend-cl-snippet-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.bcsend-cl-snippet-delete {
+    color: #d63638 !important;
+    font-weight: bold;
+}
+
+/* --- Social Section --- */
+
+.bcsend-social-fields {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.bcsend-social-platform-block {
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    padding: 14px;
+    background: #fff;
+}
+
+.bcsend-social-platform-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.bcsend-social-platform-content {
+    margin-top: 12px;
+}
+
+.bcsend-social-link-group,
+.bcsend-social-media-group {
+    margin-top: 12px;
+}
+
+.bcsend-social-media-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.bcsend-social-media-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.bcsend-social-media-item {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #dcdcde;
+    background: #f6f7f7;
+}
+
+.bcsend-social-media-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.bcsend-social-media-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(29, 35, 39, 0.8);
+    color: #fff;
+    cursor: pointer;
+    line-height: 20px;
+    text-align: center;
+    padding: 0;
+}
+
+.bcsend-social-platform-status {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #f6f7f7;
+    font-size: 12px;
+    color: #50575e;
+}
+
+.bcsend-social-platform-status.is-error {
+    background: #fcf0f1;
+    color: #8a2424;
+}
+
+.bcsend-social-platform-status.is-warning {
+    background: #fff8e5;
+    color: #6b4f00;
+}
+
+.bcsend-social-platform-status.is-ok {
+    background: #edfaef;
+    color: #155724;
+}
+
+.bcsend-char-counter.is-near-limit {
+    color: #996800;
+}
+
+
+.bcsend-composer-wrap {
+    padding-bottom: 88px;
+}
+
+.bcsend-composer-wrap .bcsend-page-header {
+    margin-bottom: 18px;
+}
+
+.bcsend-panel-right {
+    position: sticky;
+    top: 48px;
+}
+
+.bcsend-panel-right > .bcsend-field-group,
+.bcsend-content-library {
+    margin-bottom: 16px;
+    padding: 18px;
+    background: #fff;
+    border: 1px solid #d8dee6;
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.bcsend-panel-right > .bcsend-field-group > h3,
+.bcsend-content-library .bcsend-cl-header {
+    margin: -18px -18px 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid #e7edf4;
+    background: linear-gradient(180deg, #fbfdff 0%, #f5f8fc 100%);
+    border-radius: 14px 14px 0 0;
+}
+
+.bcsend-content-library {
+    padding-top: 0;
+}
+
+.bcsend-content-library .bcsend-cl-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.bcsend-generate-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.bcsend-schedule-inputs {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.bcsend-composer-bottom-bar {
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid #d8dee6;
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.bcsend-bottom-bar-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+@media screen and (max-width: 1100px) {
+    .bcsend-panel-right {
+        position: static;
+        top: auto;
+    }
+}

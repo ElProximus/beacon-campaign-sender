@@ -1,0 +1,1612 @@
+/**
+ * Beacon Campaign Sender - Shared Admin Styles
+ *
+ * Global styles for all Beacon Campaign Sender admin pages.
+ * Designed for WordPress admin panel compatibility.
+ *
+ * @package Bcsend_Plugin
+ * @since   1.0.0
+ */
+
+/* ============================================================
+   1. Main Wrapper
+   ============================================================ */
+
+.bcsend-wrap {
+    position: relative;
+    max-width: 1400px;
+    margin: 20px 20px 20px 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+}
+
+.bcsend-wrap h1 {
+    font-size: 23px;
+    font-weight: 400;
+    margin: 0 0 15px;
+    padding: 9px 0 4px;
+    line-height: 1.3;
+}
+
+.bcsend-wrap h2 {
+    font-size: 18px;
+    font-weight: 400;
+    margin: 0 0 12px;
+}
+
+.bcsend-wrap p {
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* ============================================================
+   2. Cards Row & Card Component
+   ============================================================ */
+
+.bcsend-cards-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.bcsend-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+    padding: 0;
+    flex: 1 1 280px;
+    min-width: 0;
+}
+
+.bcsend-card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #c3c4c7;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.bcsend-card-body {
+    padding: 16px;
+}
+
+.bcsend-card-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #c3c4c7;
+    background: #f6f7f7;
+}
+
+/* ============================================================
+   3. Tables
+   ============================================================ */
+
+.bcsend-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+}
+
+.bcsend-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    font-size: 13px;
+    color: #1d2327;
+    border-bottom: 1px solid #c3c4c7;
+    background: #f6f7f7;
+}
+
+.bcsend-table td {
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #50575e;
+    border-bottom: 1px solid #f0f0f1;
+    vertical-align: middle;
+}
+
+.bcsend-table tr:last-child td {
+    border-bottom: none;
+}
+
+.bcsend-table tr:hover td {
+    background: #f6f7f7;
+}
+
+.bcsend-table .bcsend-table-actions {
+    white-space: nowrap;
+    text-align: right;
+}
+
+.bcsend-table .bcsend-table-actions a,
+.bcsend-table .bcsend-table-actions button {
+    margin-left: 8px;
+}
+
+/* ============================================================
+   4. Badges
+   ============================================================ */
+
+.bcsend-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    border-radius: 10px;
+    text-transform: capitalize;
+    white-space: nowrap;
+}
+
+.bcsend-badge-draft {
+    background: #dcdcde;
+    color: #50575e;
+}
+
+.bcsend-badge-approved {
+    background: #d5e5fa;
+    color: #135e96;
+}
+
+.bcsend-badge-scheduled {
+    background: #e7d7f5;
+    color: #6b3fa0;
+}
+
+.bcsend-badge-queued {
+    background: #fcf0d4;
+    color: #996800;
+}
+
+.bcsend-badge-sending {
+    background: #fef3cd;
+    color: #856404;
+}
+
+.bcsend-badge-sent {
+    background: #d4edda;
+    color: #155724;
+}
+
+.bcsend-badge-fallback {
+    background: #fcf0d4;
+    color: #996800;
+}
+
+.bcsend-badge-failed {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.bcsend-badge-cancelled {
+    background: #dcdcde;
+    color: #8c8f94;
+    text-decoration: line-through;
+}
+
+.bcsend-badge-brevo {
+    background: #d5e5fa;
+    color: #135e96;
+}
+
+.bcsend-badge-smart {
+    background: #d4edda;
+    color: #155724;
+}
+
+/* ============================================================
+   5. Buttons
+   ============================================================ */
+
+.bcsend-btn {
+    display: inline-block;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.5;
+    text-decoration: none;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    vertical-align: middle;
+    white-space: nowrap;
+    background: #2271b1;
+    color: #fff;
+}
+
+.bcsend-btn:hover {
+    background: #135e96;
+    color: #fff;
+}
+
+.bcsend-btn:focus {
+    outline: 2px solid #2271b1;
+    outline-offset: 1px;
+}
+
+.bcsend-btn-secondary {
+    background: #f6f7f7;
+    color: #2271b1;
+    border-color: #2271b1;
+}
+
+.bcsend-btn-secondary:hover {
+    background: #f0f0f1;
+    color: #135e96;
+    border-color: #135e96;
+}
+
+.bcsend-btn-danger {
+    background: #d63638;
+    color: #fff;
+    border-color: #d63638;
+}
+
+.bcsend-btn-danger:hover {
+    background: #b32d2e;
+    color: #fff;
+    border-color: #b32d2e;
+}
+
+.bcsend-btn-success {
+    background: #00a32a;
+    color: #fff;
+    border-color: #00a32a;
+}
+
+.bcsend-btn-success:hover {
+    background: #008a20;
+    color: #fff;
+    border-color: #008a20;
+}
+
+.bcsend-email-log-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 0 0 16px;
+}
+
+.bcsend-email-preview {
+    width: 100%;
+    min-height: 400px;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.bcsend-email-plain {
+    margin: 0;
+    padding: 16px;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    background: #fff;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.bcsend-btn-lg {
+    padding: 10px 24px;
+    font-size: 15px;
+}
+
+.bcsend-btn:disabled,
+.bcsend-btn.bcsend-is-loading {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.bcsend-btn.bcsend-is-loading::after {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-left: 8px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: bcsend-spin 0.6s linear infinite;
+    vertical-align: middle;
+}
+
+.bcsend-btn-secondary.bcsend-is-loading::after {
+    border-color: rgba(34, 113, 177, 0.3);
+    border-top-color: #2271b1;
+}
+
+@keyframes bcsend-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ============================================================
+   6. Notifications
+   ============================================================ */
+
+.bcsend-notification {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    border-left: 4px solid #2271b1;
+    background: #f0f6fc;
+    border-radius: 0 3px 3px 0;
+    font-size: 13px;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.bcsend-notification.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.bcsend-notification-success {
+    border-left-color: #00a32a;
+    background: #edfaef;
+    color: #155724;
+}
+
+.bcsend-notification-error {
+    border-left-color: #d63638;
+    background: #fcf0f1;
+    color: #721c24;
+}
+
+.bcsend-notification-warning {
+    border-left-color: #dba617;
+    background: #fef8ee;
+    color: #6e4e00;
+}
+
+.bcsend-notification-info {
+    border-left-color: #2271b1;
+    background: #f0f6fc;
+    color: #135e96;
+}
+
+.bcsend-notification-close {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 0 0 12px;
+    line-height: 1;
+    color: inherit;
+    opacity: 0.6;
+}
+
+.bcsend-notification-close:hover {
+    opacity: 1;
+}
+
+/* ============================================================
+   7. Loading Spinner Overlay
+   ============================================================ */
+
+.bcsend-loading {
+    position: relative;
+}
+
+.bcsend-loading::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.7);
+    z-index: 100;
+}
+
+.bcsend-loading::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 30px;
+    height: 30px;
+    margin: -15px 0 0 -15px;
+    border: 3px solid #c3c4c7;
+    border-top-color: #2271b1;
+    border-radius: 50%;
+    animation: bcsend-spin 0.6s linear infinite;
+    z-index: 101;
+}
+
+/* ============================================================
+   8. Environment Bar
+   ============================================================ */
+
+.bcsend-environment-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.bcsend-environment-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #50575e;
+}
+
+.bcsend-environment-check .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+.bcsend-environment-check.is-ok .dashicons {
+    color: #00a32a;
+}
+
+.bcsend-environment-check.is-warning .dashicons {
+    color: #dba617;
+}
+
+.bcsend-environment-check.is-error .dashicons {
+    color: #d63638;
+}
+
+/* ============================================================
+   9. Form Groups
+   ============================================================ */
+
+.bcsend-form-group {
+    margin-bottom: 16px;
+}
+
+.bcsend-form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1d2327;
+    margin-bottom: 6px;
+}
+
+.bcsend-form-group input[type="text"],
+.bcsend-form-group input[type="email"],
+.bcsend-form-group input[type="number"],
+.bcsend-form-group input[type="url"],
+.bcsend-form-group input[type="password"],
+.bcsend-form-group input[type="date"],
+.bcsend-form-group input[type="time"],
+.bcsend-form-group textarea,
+.bcsend-form-group select {
+    width: 100%;
+    max-width: 500px;
+    padding: 6px 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    border: 1px solid #8c8f94;
+    border-radius: 3px;
+    background: #fff;
+    color: #2c3338;
+    box-sizing: border-box;
+}
+
+.bcsend-form-group input:focus,
+.bcsend-form-group textarea:focus,
+.bcsend-form-group select:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: none;
+}
+
+.bcsend-form-group textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.bcsend-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    font-style: italic;
+    color: #8c8f94;
+}
+
+/* ============================================================
+   10. Pagination
+   ============================================================ */
+
+.bcsend-pagination {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    font-size: 13px;
+    color: #50575e;
+}
+
+.bcsend-pagination button {
+    padding: 4px 10px;
+    font-size: 13px;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    background: #f6f7f7;
+    color: #2271b1;
+    cursor: pointer;
+}
+
+.bcsend-pagination button:hover {
+    background: #f0f0f1;
+    border-color: #8c8f94;
+}
+
+.bcsend-pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.bcsend-pagination .bcsend-pagination-info {
+    margin-left: auto;
+}
+
+/* ============================================================
+   11. Modal Overlay
+   ============================================================ */
+
+.bcsend-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 100000;
+    align-items: center;
+    justify-content: center;
+}
+
+.bcsend-modal-overlay.is-open {
+    display: flex;
+}
+
+.bcsend-modal {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 5px 30px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 800px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.bcsend-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid #c3c4c7;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.bcsend-modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #50575e;
+    padding: 0;
+    line-height: 1;
+}
+
+.bcsend-modal-close:hover {
+    color: #d63638;
+}
+
+.bcsend-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.bcsend-modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #c3c4c7;
+    text-align: right;
+}
+
+/* ============================================================
+   12. Tabs (WordPress nav-tab-wrapper compatible)
+   ============================================================ */
+
+.bcsend-tabs {
+    display: flex;
+    border-bottom: 1px solid #c3c4c7;
+    margin-bottom: 20px;
+    padding: 0;
+}
+
+.bcsend-nav-tab {
+    display: inline-block;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    color: #50575e;
+    border: 1px solid transparent;
+    border-bottom: none;
+    margin-bottom: -1px;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 3px 3px 0 0;
+}
+
+.bcsend-nav-tab:hover {
+    color: #135e96;
+}
+
+.bcsend-nav-tab.nav-tab-active {
+    color: #1d2327;
+    background: #fff;
+    border-color: #c3c4c7;
+}
+
+.bcsend-tab-content {
+    display: none;
+}
+
+.bcsend-tab-content.is-active {
+    display: block;
+}
+
+/* ============================================================
+   13. Expandable Rows
+   ============================================================ */
+
+.bcsend-expandable-row {
+    cursor: pointer;
+}
+
+.bcsend-expandable-row:hover td {
+    background: #f0f6fc;
+}
+
+.bcsend-expandable-row .bcsend-expand-icon {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 5px 0 5px 6px;
+    border-color: transparent transparent transparent #50575e;
+    margin-right: 6px;
+    transition: transform 0.2s ease;
+    vertical-align: middle;
+}
+
+.bcsend-expandable-row.is-expanded .bcsend-expand-icon {
+    transform: rotate(90deg);
+}
+
+.bcsend-expandable-content {
+    display: none;
+}
+
+.bcsend-expandable-content.is-expanded {
+    display: table-row;
+}
+
+.bcsend-expandable-content td {
+    background: #f9f9f9;
+    padding: 12px 16px;
+}
+
+.bcsend-expandable-content pre {
+    margin: 0;
+    padding: 10px;
+    background: #2c3338;
+    color: #e0e0e0;
+    border-radius: 3px;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* ============================================================
+   14. Test Page Cards
+   ============================================================ */
+
+.bcsend-test-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.bcsend-test-card h3 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.bcsend-test-card p {
+    margin: 0 0 12px;
+    color: #50575e;
+}
+
+.bcsend-test-result {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 3px;
+    font-size: 13px;
+    line-height: 1.5;
+    display: none;
+}
+
+.bcsend-test-result.is-visible {
+    display: block;
+}
+
+.bcsend-test-result.is-success {
+    background: #edfaef;
+    border: 1px solid #00a32a;
+    color: #155724;
+}
+
+.bcsend-test-result.is-error {
+    background: #fcf0f1;
+    border: 1px solid #d63638;
+    color: #721c24;
+}
+
+/* ============================================================
+   15. Sticky Bottom Bar
+   ============================================================ */
+
+.bcsend-sticky-bar {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 12px 20px;
+    background: #fff;
+    border-top: 1px solid #c3c4c7;
+    box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.08);
+    z-index: 100;
+}
+
+/* ============================================================
+   16. CSS Grid Container
+   ============================================================ */
+
+.bcsend-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+/* ============================================================
+   17. Empty State
+   ============================================================ */
+
+.bcsend-empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #8c8f94;
+}
+
+.bcsend-empty-state .dashicons {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    color: #c3c4c7;
+}
+
+.bcsend-empty-state p {
+    font-size: 14px;
+    margin: 0;
+}
+
+/* ============================================================
+   18. Inline Delete Confirmation
+   ============================================================ */
+
+.bcsend-inline-confirm {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.bcsend-inline-confirm.is-active {
+    display: inline-flex;
+}
+
+.bcsend-inline-confirm span {
+    color: #d63638;
+    font-weight: 600;
+}
+
+/* ============================================================
+   19. Checkbox Column
+   ============================================================ */
+
+.bcsend-table th.bcsend-col-check,
+.bcsend-table td.bcsend-col-check {
+    width: 36px;
+    padding: 10px 8px;
+    text-align: center;
+}
+
+.bcsend-table th.bcsend-col-check input,
+.bcsend-table td.bcsend-col-check input {
+    margin: 0;
+}
+
+/* ============================================================
+   20. Calendar Grid (Queue Page)
+   ============================================================ */
+
+#bcsend-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+    background: #c3c4c7;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.bcsend-cal-header {
+    background: #f6f7f7;
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #50575e;
+}
+
+.bcsend-cal-cell {
+    background: #fff;
+    min-height: 80px;
+    padding: 6px;
+    font-size: 13px;
+    vertical-align: top;
+}
+
+.bcsend-cal-empty {
+    background: #f9f9f9;
+}
+
+.bcsend-cal-today {
+    background: #f0f6fc;
+}
+
+.bcsend-cal-day-num {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #50575e;
+    margin-bottom: 4px;
+}
+
+.bcsend-cal-today .bcsend-cal-day-num {
+    color: #2271b1;
+}
+
+.bcsend-cal-campaign {
+    display: block;
+    padding: 2px 5px;
+    margin-bottom: 2px;
+    font-size: 11px;
+    background: #d5e5fa;
+    color: #135e96;
+    border-radius: 2px;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bcsend-cal-campaign:hover {
+    background: #c4d9f2;
+    color: #0a4b78;
+}
+
+#bcsend-cal-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.bcsend-cal-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+/* ============================================================
+   21. Settings Inline Test Result
+   ============================================================ */
+
+.bcsend-test-inline-result {
+    display: none;
+    margin-top: 6px;
+    padding: 6px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.bcsend-test-inline-result.is-success {
+    display: block;
+    background: #edfaef;
+    color: #155724;
+    border: 1px solid #00a32a;
+}
+
+.bcsend-test-inline-result.is-error {
+    display: block;
+    background: #fcf0f1;
+    color: #721c24;
+    border: 1px solid #d63638;
+}
+
+/* ============================================================
+   22. Responsive
+   ============================================================ */
+
+@media screen and (max-width: 782px) {
+    .bcsend-cards-row {
+        flex-direction: column;
+    }
+
+    .bcsend-card {
+        flex: 1 1 100%;
+    }
+
+    .bcsend-table {
+        display: block;
+        overflow-x: auto;
+    }
+
+    .bcsend-sticky-bar {
+        flex-wrap: wrap;
+    }
+
+    .bcsend-modal {
+        width: 95%;
+        max-height: 90vh;
+    }
+}
+
+/* ============================================================
+   23. Parameter Search Dropdowns (Audiences)
+   ============================================================ */
+
+.bcsend-param-category,
+.bcsend-param-product {
+    position: relative;
+}
+
+.bcsend-param-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-width: 500px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.bcsend-param-result-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.bcsend-param-result-item:last-child {
+    border-bottom: none;
+}
+
+.bcsend-param-result-item:hover {
+    background: #f0f6fc;
+}
+
+.bcsend-param-no-results {
+    padding: 10px 12px;
+    text-align: center;
+    color: #8c8f94;
+    font-size: 13px;
+}
+
+/* ============================================================
+   24. Segment Contacts Panel
+   ============================================================ */
+
+.bcsend-contacts-row td {
+    padding: 0 !important;
+    background: #f9f9f9 !important;
+}
+
+.bcsend-contacts-panel {
+    padding: 12px 16px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.bcsend-contacts-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+
+.bcsend-contacts-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.bcsend-contact-email {
+    display: inline-block;
+    padding: 3px 8px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #2c3338;
+}
+
+.bcsend-contacts-more {
+    display: inline-block;
+    padding: 3px 8px;
+    font-size: 12px;
+    color: #8c8f94;
+    font-style: italic;
+}
+
+.bcsend-contacts-empty {
+    color: #8c8f94;
+    font-size: 13px;
+    margin: 0;
+}
+
+.bcsend-channel-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.bcsend-channel-badge {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 999px;
+}
+
+.bcsend-status-teal {
+    background: #e6f7f2;
+    color: #0d7a5f;
+}
+
+.bcsend-status-amber {
+    background: #fff8e6;
+    color: #8a6400;
+}
+
+.bcsend-status-red {
+    background: #fde8e8;
+    color: #b42318;
+}
+
+.bcsend-zernio-webhook-diagnostics {
+    margin-top: 16px;
+}
+
+.bcsend-zernio-webhook-diagnostics h4 {
+    margin: 0 0 10px;
+}
+
+.bcsend-zernio-webhook-diagnostics table th {
+    width: 180px;
+}
+
+
+:root {
+    --bcsend-surface: #ffffff;
+    --bcsend-surface-muted: #f6f8fb;
+    --bcsend-surface-accent: linear-gradient(135deg, #f6fbff 0%, #eef7f3 100%);
+    --bcsend-border: #d8dee6;
+    --bcsend-border-strong: #c3ccd8;
+    --bcsend-text: #17212b;
+    --bcsend-text-muted: #5f6b7a;
+    --bcsend-text-soft: #7b8794;
+    --bcsend-primary: #0f6c9b;
+    --bcsend-primary-dark: #0a5378;
+    --bcsend-success: #157347;
+    --bcsend-warning: #9a6700;
+    --bcsend-danger: #b42318;
+    --bcsend-radius-sm: 6px;
+    --bcsend-radius-md: 12px;
+    --bcsend-radius-lg: 18px;
+    --bcsend-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --bcsend-shadow-md: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.bcsend-wrap {
+    color: var(--bcsend-text);
+}
+
+.bcsend-wrap h1,
+.bcsend-wrap h2,
+.bcsend-wrap h3 {
+    color: var(--bcsend-text);
+}
+
+.bcsend-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    margin: 0 0 22px;
+    padding: 24px 28px;
+    background: var(--bcsend-surface-accent);
+    border: 1px solid var(--bcsend-border);
+    border-radius: var(--bcsend-radius-lg);
+    box-shadow: var(--bcsend-shadow-sm);
+}
+
+.bcsend-page-title-group {
+    min-width: 0;
+}
+
+.bcsend-page-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 5px 10px;
+    background: rgba(15, 108, 155, 0.09);
+    border-radius: 999px;
+    color: var(--bcsend-primary-dark);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.bcsend-page-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.bcsend-page-header h1,
+.bcsend-wrap .bcsend-page-header h1 {
+    margin: 0;
+    padding: 0;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.bcsend-page-lede {
+    max-width: 820px;
+    margin: 8px 0 0;
+    color: var(--bcsend-text-muted);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.bcsend-page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.bcsend-page-actions .button,
+.bcsend-page-actions .bcsend-btn {
+    min-height: 38px;
+    padding-inline: 16px;
+    border-radius: 999px;
+}
+
+.bcsend-surface,
+.bcsend-panel-surface,
+.bcsend-dashboard-card,
+.bcsend-audiences-section,
+.bcsend-settings-form .bcsend-tab-content,
+ .bcsend-logs-table,
+ .bcsend-queue-table,
+ .bcsend-template-card,
+ .bcsend-empty-state-box {
+    background: var(--bcsend-surface);
+    border: 1px solid var(--bcsend-border);
+    border-radius: var(--bcsend-radius-md);
+    box-shadow: var(--bcsend-shadow-sm);
+}
+
+.bcsend-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 20px;
+}
+
+.bcsend-dashboard-card {
+    padding: 22px;
+}
+
+.bcsend-dashboard-card h2 {
+    margin-bottom: 14px;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.bcsend-card-next-campaign {
+    grid-column: span 6;
+}
+
+.bcsend-card-segments,
+.bcsend-card-actions {
+    grid-column: span 3;
+}
+
+.bcsend-card-recent-campaigns {
+    padding: 22px;
+}
+
+.bcsend-env-status-bar,
+.bcsend-environment-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+    padding: 14px 16px;
+    background: var(--bcsend-surface);
+    border: 1px solid var(--bcsend-border);
+    border-radius: var(--bcsend-radius-md);
+    box-shadow: var(--bcsend-shadow-sm);
+}
+
+.bcsend-env-check,
+.bcsend-environment-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    background: var(--bcsend-surface-muted);
+    border-radius: 999px;
+    color: var(--bcsend-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.bcsend-env-check .dashicons,
+.bcsend-environment-check .dashicons {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+}
+
+.bcsend-env-ok .dashicons {
+    color: var(--bcsend-success);
+}
+
+.bcsend-env-warn .dashicons {
+    color: var(--bcsend-warning);
+}
+
+.bcsend-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.bcsend-detail-table th,
+.bcsend-detail-table td {
+    padding: 10px 0;
+    border-bottom: 1px solid #edf1f5;
+    text-align: left;
+    vertical-align: top;
+}
+
+.bcsend-detail-table th {
+    width: 110px;
+    color: var(--bcsend-text-soft);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.bcsend-detail-table td {
+    color: var(--bcsend-text);
+    font-size: 14px;
+}
+
+.bcsend-detail-table tr:last-child th,
+.bcsend-detail-table tr:last-child td {
+    border-bottom: none;
+}
+
+.bcsend-countdown {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid #edf1f5;
+}
+
+.bcsend-countdown-label {
+    color: var(--bcsend-text-soft);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.bcsend-countdown-value {
+    color: var(--bcsend-primary-dark);
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.bcsend-stat-number {
+    margin-bottom: 6px;
+    font-size: 42px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+.bcsend-stat-label {
+    margin: 0;
+    color: var(--bcsend-text-muted);
+    font-size: 14px;
+}
+
+.bcsend-stat-meta {
+    margin: 12px 0 0;
+    color: var(--bcsend-text-soft);
+    font-size: 12px;
+}
+
+.bcsend-quick-actions {
+    display: grid;
+    gap: 12px;
+}
+
+.bcsend-quick-actions .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 48px;
+    border-radius: 12px;
+}
+
+.bcsend-dashboard-footer {
+    margin-top: 16px;
+    color: var(--bcsend-text-soft);
+}
+
+.bcsend-settings-wrap .nav-tab-wrapper {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 0 0 18px;
+    padding: 0;
+    border-bottom: none;
+}
+
+.bcsend-settings-wrap .nav-tab-wrapper .nav-tab {
+    margin: 0;
+    border: 1px solid var(--bcsend-border);
+    border-radius: 999px;
+    background: var(--bcsend-surface);
+    color: var(--bcsend-text-muted);
+    font-weight: 600;
+}
+
+.bcsend-settings-wrap .nav-tab-wrapper .nav-tab:hover {
+    color: var(--bcsend-primary-dark);
+    border-color: var(--bcsend-primary);
+}
+
+.bcsend-settings-wrap .nav-tab-wrapper .nav-tab-active {
+    background: #e9f4fb;
+    border-color: #b7d7ea;
+    color: var(--bcsend-primary-dark);
+}
+
+.bcsend-settings-form .bcsend-tab-content {
+    padding: 22px 26px;
+}
+
+.bcsend-settings-form .form-table th {
+    width: 210px;
+    color: var(--bcsend-text);
+}
+
+.bcsend-settings-form .description {
+    color: var(--bcsend-text-soft);
+}
+
+.bcsend-audiences-section {
+    padding: 22px;
+}
+
+.bcsend-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.bcsend-section-header h2 {
+    margin: 0;
+}
+
+.bcsend-query-type-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #eef5fb;
+    color: var(--bcsend-primary-dark);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.bcsend-create-segment-toggle {
+    margin-top: 18px;
+}
+
+.bcsend-inline-form {
+    margin-top: 18px;
+    padding: 20px;
+    background: var(--bcsend-surface-muted);
+    border: 1px solid var(--bcsend-border);
+    border-radius: var(--bcsend-radius-md);
+}
+
+.bcsend-queue-toolbar,
+.bcsend-logs-filter-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+    padding: 16px 18px;
+    background: var(--bcsend-surface);
+    border: 1px solid var(--bcsend-border);
+    border-radius: var(--bcsend-radius-md);
+    box-shadow: var(--bcsend-shadow-sm);
+}
+
+.bcsend-view-toggle,
+.bcsend-queue-filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.bcsend-view-btn,
+.bcsend-queue-filters .button,
+.bcsend-logs-filter-bar .button {
+    border-radius: 999px;
+}
+
+.bcsend-template-card {
+    overflow: hidden;
+}
+
+.bcsend-template-info {
+    padding: 16px 18px 8px;
+}
+
+.bcsend-template-name {
+    margin: 0 0 6px;
+    font-size: 16px;
+}
+
+.bcsend-template-date {
+    color: var(--bcsend-text-soft);
+    font-size: 12px;
+}
+
+.bcsend-template-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 18px 18px;
+}
+
+.bcsend-empty-state-box {
+    padding: 40px 28px;
+    text-align: center;
+}
+
+.bcsend-empty-state-box .dashicons {
+    width: 52px;
+    height: 52px;
+    font-size: 52px;
+    color: #bcc7d4;
+}
+
+.bcsend-empty-state-box p {
+    max-width: 560px;
+    margin: 14px auto 0;
+    color: var(--bcsend-text-muted);
+    font-size: 14px;
+}
+
+@media screen and (max-width: 1200px) {
+    .bcsend-card-next-campaign,
+    .bcsend-card-segments,
+    .bcsend-card-actions {
+        grid-column: span 12;
+    }
+}
+
+@media screen and (max-width: 782px) {
+    .bcsend-page-header {
+        padding: 20px;
+    }
+
+    .bcsend-page-header,
+    .bcsend-section-header,
+    .bcsend-queue-toolbar,
+    .bcsend-logs-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .bcsend-page-actions {
+        justify-content: flex-start;
+    }
+
+    .bcsend-settings-form .bcsend-tab-content,
+    .bcsend-audiences-section,
+    .bcsend-dashboard-card,
+    .bcsend-card-recent-campaigns {
+        padding: 18px;
+    }
+}

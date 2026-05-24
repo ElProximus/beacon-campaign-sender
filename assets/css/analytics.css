@@ -1,0 +1,222 @@
+/**
+ * Beacon Campaign Sender - Analytics Styles
+ *
+ * Styles specific to the analytics/reporting page including
+ * stat cards, chart containers, and top campaigns table.
+ *
+ * @package Bcsend_Plugin
+ * @since   1.0.0
+ */
+
+/* ============================================================
+   1. Stats Row
+   ============================================================ */
+
+.bcsend-stats-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.bcsend-stat-card {
+    flex: 1 1 160px;
+    min-width: 140px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px 16px;
+    text-align: center;
+}
+
+.bcsend-stat-card .bcsend-stat-card-value {
+    display: block;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #1d2327;
+    margin-bottom: 4px;
+}
+
+.bcsend-stat-card .bcsend-stat-card-label {
+    display: block;
+    font-size: 13px;
+    color: #50575e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bcsend-stat-card .bcsend-stat-change {
+    display: block;
+    font-size: 12px;
+    margin-top: 6px;
+    font-weight: 600;
+}
+
+.bcsend-stat-card .bcsend-stat-change.is-positive {
+    color: #00a32a;
+}
+
+.bcsend-stat-card .bcsend-stat-change.is-negative {
+    color: #d63638;
+}
+
+/* ============================================================
+   2. Chart Containers
+   ============================================================ */
+
+.bcsend-chart-container {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 20px;
+    height: 300px;
+    position: relative;
+}
+
+.bcsend-chart-container h2 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 12px;
+    color: #1d2327;
+}
+
+.bcsend-chart-container canvas {
+    max-height: 250px;
+}
+
+.bcsend-charts-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.bcsend-charts-row .bcsend-chart-container {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+@media screen and (max-width: 960px) {
+    .bcsend-charts-row {
+        flex-direction: column;
+    }
+}
+
+/* ============================================================
+   3. Chart Empty State
+   ============================================================ */
+
+.bcsend-chart-empty {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #8c8f94;
+    font-size: 14px;
+}
+
+.bcsend-chart-empty .dashicons {
+    font-size: 36px;
+    width: 36px;
+    height: 36px;
+    display: block;
+    margin: 0 auto 8px;
+    color: #c3c4c7;
+}
+
+/* ============================================================
+   4. Top Campaigns Table
+   ============================================================ */
+
+.bcsend-top-campaigns-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+}
+
+.bcsend-top-campaigns-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1d2327;
+    border-bottom: 1px solid #c3c4c7;
+    background: #f6f7f7;
+}
+
+.bcsend-top-campaigns-table td {
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #50575e;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.bcsend-top-campaigns-table tr:last-child td {
+    border-bottom: none;
+}
+
+.bcsend-top-campaigns-table tr:hover td {
+    background: #f6f7f7;
+}
+
+.bcsend-top-campaigns-table .bcsend-rate-bar {
+    display: inline-block;
+    height: 6px;
+    background: #2271b1;
+    border-radius: 3px;
+    min-width: 4px;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+
+/* ============================================================
+   5. Date Range Filter
+   ============================================================ */
+
+.bcsend-analytics-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.bcsend-analytics-toolbar .bcsend-date-range {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.bcsend-analytics-toolbar .bcsend-date-range select {
+    padding: 4px 8px;
+    font-size: 13px;
+    border: 1px solid #8c8f94;
+    border-radius: 3px;
+}
+
+/* ============================================================
+   6. Responsive
+   ============================================================ */
+
+@media screen and (max-width: 600px) {
+    .bcsend-stats-cards {
+        flex-direction: column;
+    }
+
+    .bcsend-stat-card {
+        flex: none;
+    }
+
+    .bcsend-stat-card .bcsend-stat-card-value {
+        font-size: 24px;
+    }
+
+    .bcsend-analytics-toolbar {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+}

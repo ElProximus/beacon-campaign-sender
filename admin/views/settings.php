@@ -129,6 +129,22 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 				</tr>
 				<tr>
 					<th scope="row">
+						<label for="bcsend-subscribe-enabled"><?php esc_html_e( 'Signup Forms', 'beacon-campaign-sender' ); ?></label>
+					</th>
+					<td>
+						<label>
+							<input type="checkbox"
+									id="bcsend-subscribe-enabled"
+									name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[subscribe_enabled]"
+									value="1"
+									<?php checked( $settings['subscribe_enabled'], 1 ); ?> />
+							<?php esc_html_e( 'Enable the public signup form and its submit handler', 'beacon-campaign-sender' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'When unchecked, the [bcsend_subscribe_form] shortcode renders nothing, the submit script and form CSS are not loaded on any page, and the subscribe endpoint stops accepting submissions.', 'beacon-campaign-sender' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
 						<label for="bcsend-default-subscriber-lists"><?php esc_html_e( 'Default Subscriber Lists', 'beacon-campaign-sender' ); ?></label>
 					</th>
 					<td>

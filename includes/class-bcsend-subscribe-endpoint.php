@@ -49,6 +49,16 @@ class Bcsend_Subscribe_Endpoint {
 	 * @return WP_REST_Response
 	 */
 	public static function handle_subscribe( WP_REST_Request $request ) {
+		if ( ! self::is_subscribe_enabled() ) {
+			return new WP_REST_Response(
+				array(
+					'success' => false,
+					'message' => __( 'Subscriptions are not currently available.', 'beacon-campaign-sender' ),
+				),
+				403
+			);
+		}
+
 		$params   = $request->get_json_params();
 		$params   = is_array( $params ) ? $params : $request->get_params();
 		$email    = isset( $params['email'] ) ? strtolower( sanitize_email( $params['email'] ) ) : '';
@@ -168,6 +178,14 @@ class Bcsend_Subscribe_Endpoint {
 	 * @return string
 	 */
 	public static function render_shortcode( $atts = array() ) {
+		if ( ! self::is_subscribe_enabled() ) {
+			if ( current_user_can( 'manage_options' ) ) {
+				return '<p class="bcsend-subscribe-form-disabled">' . esc_html__( 'Signup forms are disabled in Beacon Campaign Sender settings. (Only administrators see this notice.)', 'beacon-campaign-sender' ) . '</p>';
+			}
+
+			return '';
+		}
+
 		$atts = shortcode_atts(
 			array(
 				'style'       => 'card',
@@ -246,6 +264,10 @@ class Bcsend_Subscribe_Endpoint {
 	 * @return void
 	 */
 	public static function enqueue_frontend_assets() {
+		if ( ! self::is_subscribe_enabled() ) {
+			return;
+		}
+
 		wp_register_script( 'bcsend-subscribe-form', false, array(), BCSEND_VERSION, true );
 		wp_enqueue_script( 'bcsend-subscribe-form' );
 		wp_add_inline_script(
@@ -379,8 +401,22 @@ class Bcsend_Subscribe_Endpoint {
 				'subscribe_terms_text'      => __( 'By signing up, you agree to our', 'beacon-campaign-sender' ),
 				'subscribe_terms_link_text' => __( 'Terms of Service', 'beacon-campaign-sender' ),
 				'subscribe_custom_css'      => '',
+				'subscribe_enabled'         => 1,
 			)
 		);
+	}
+
+	/**
+	 * Whether the public signup feature is enabled in settings.
+	 *
+	 * Treats a missing value as enabled so existing installs keep working.
+	 *
+	 * @return bool
+	 */
+	private static function is_subscribe_enabled() {
+		$settings = self::get_frontend_settings();
+
+		return ! isset( $settings['subscribe_enabled'] ) || ! empty( $settings['subscribe_enabled'] );
 	}
 
 	/**

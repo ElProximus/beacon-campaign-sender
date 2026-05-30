@@ -105,6 +105,7 @@ class Bcsend_Settings {
 		$sanitized['subscribe_terms_link_text'] = isset( $input['subscribe_terms_link_text'] ) ? sanitize_text_field( $input['subscribe_terms_link_text'] ) : __( 'Terms of Service', 'beacon-campaign-sender' );
 		// Strip tags so custom CSS cannot break out of the <style> wrapper; line breaks are preserved.
 		$sanitized['subscribe_custom_css']      = isset( $input['subscribe_custom_css'] ) ? trim( wp_strip_all_tags( (string) $input['subscribe_custom_css'] ) ) : '';
+		$sanitized['subscribe_enabled']         = isset( $input['subscribe_enabled'] ) ? 1 : 0;
 
 		// Push settings.
 		$sanitized['push_mode']                     = isset( $input['push_mode'] ) && in_array( $input['push_mode'], array( 'auto', 'manual' ), true ) ? $input['push_mode'] : 'auto';
@@ -274,6 +275,7 @@ class Bcsend_Settings {
 			'subscribe_terms_text'          => __( 'By signing up, you agree to our', 'beacon-campaign-sender' ),
 			'subscribe_terms_link_text'     => __( 'Terms of Service', 'beacon-campaign-sender' ),
 			'subscribe_custom_css'          => '',
+			'subscribe_enabled'             => 1,
 		);
 
 		$settings = wp_parse_args( $settings, $defaults );

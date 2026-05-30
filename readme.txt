@@ -4,7 +4,7 @@ Tags: email, newsletter, push notifications, ai, marketing
 Requires at least: 5.8
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,8 @@ No. Campaign emails are always sent directly to Brevo's API and do not pass thro
 = How do I add an email signup form to my site? =
 
 Add the shortcode `[bcsend_subscribe_form]` to any page, post, or text/shortcode widget. The form collects an email address and consent, plus optional first and last name. New subscribers are added to the list(s) set in Beacon Campaign Sender > Settings > Default Subscriber Lists.
+
+If enabled (the default), the form works on any page via the shortcode or your own custom HTML. You can turn the entire signup feature off under Beacon Campaign Sender > Settings > Signup Forms, which also stops the submit script and form CSS from loading.
 
 Optional shortcode attributes:
 
@@ -175,6 +177,9 @@ Beacon Campaign Sender stores subscriber sign-up records and email logs locally 
 The plugin integrates with WordPress personal data exporters and erasers for locally stored subscriber and email log records.
 
 == Changelog ==
+
+= 1.0.4 =
+- Added an "Enable signup forms" setting (on by default). When unchecked, the [bcsend_subscribe_form] shortcode renders nothing, the submit script and form CSS no longer load, and the subscribe endpoint rejects submissions.
 
 = 1.0.3 =
 - Documented the public subscribe form: added the [bcsend_subscribe_form] shortcode usage to the readme and the Settings screen.

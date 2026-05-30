@@ -139,6 +139,16 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 								class="regular-text"
 								placeholder="14" />
 						<p class="description"><?php esc_html_e( 'Comma-separated Brevo list IDs used for new subscriber ingestion when a source does not provide an override.', 'beacon-campaign-sender' ); ?></p>
+						<p class="description">
+							<?php
+							printf(
+								/* translators: 1: subscribe form shortcode, 2: shortcode with list_ids override. */
+								esc_html__( 'Add the signup form to any page or post with the shortcode %1$s. New subscribers are added to the list IDs above. To send a specific form to different lists instead, pass a list_ids attribute, for example %2$s.', 'beacon-campaign-sender' ),
+								'<code>[bcsend_subscribe_form]</code>',
+								'<code>[bcsend_subscribe_form list_ids="14,15"]</code>'
+							);
+							?>
+						</p>
 					</td>
 				</tr>
 				<tr>
@@ -180,6 +190,48 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 								value="<?php echo esc_attr( $settings['subscribe_terms_link_text'] ); ?>"
 								class="regular-text"
 								placeholder="<?php esc_attr_e( 'Terms of Service', 'beacon-campaign-sender' ); ?>" />
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="bcsend-subscribe-custom-css"><?php esc_html_e( 'Subscribe Form CSS', 'beacon-campaign-sender' ); ?></label>
+					</th>
+					<td>
+						<textarea id="bcsend-subscribe-custom-css"
+								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[subscribe_custom_css]"
+								rows="8"
+								class="large-text code"
+								spellcheck="false"
+								placeholder=".bcsend-subscribe-form button { background: #175cd3; }"><?php echo esc_textarea( $settings['subscribe_custom_css'] ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'Optional CSS applied to every subscribe form on the site (shortcode or custom HTML), loaded after the form’s default styles so your rules win. Scope rules to .bcsend-subscribe-form (or a class you add via the shortcode’s class="" attribute) to avoid affecting the rest of the page.', 'beacon-campaign-sender' ); ?></p>
+						<p class="description">
+							<?php esc_html_e( 'Class hooks you can target:', 'beacon-campaign-sender' ); ?>
+							<code>.bcsend-subscribe-form</code>, <code>.bcsend-subscribe-form-row</code>, <code>.bcsend-subscribe-form-consent</code>, <code>.bcsend-subscribe-form-fine-print</code>, <code>.bcsend-subscribe-form-message</code>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Embed in Custom HTML', 'beacon-campaign-sender' ); ?></th>
+					<td>
+						<p class="description"><?php esc_html_e( 'For most sites the [bcsend_subscribe_form] shortcode is easiest. To use your own markup, build any form with the class, REST URL, and field names below — the plugin’s script handles submission automatically on every front-end page.', 'beacon-campaign-sender' ); ?></p>
+						<?php
+						$bcsend_subscribe_rest_url = esc_url( rest_url( 'beacon-campaign-sender/v1/subscribe' ) );
+						$bcsend_custom_html_snippet = sprintf(
+							'<form class="bcsend-subscribe-form" data-bcsend-rest-url="%s">' . "\n" .
+							'  <input type="email" name="email" required placeholder="Email address" />' . "\n" .
+							'  <label><input type="checkbox" name="consent" value="1" required /> I agree to receive emails.</label>' . "\n" .
+							'  <input type="text" name="first_name" placeholder="First name" />' . "\n" .
+							'  <input type="text" name="last_name" placeholder="Last name" />' . "\n" .
+							'  <input type="hidden" name="list_ids" value="" />' . "\n" .
+							'  <input type="text" name="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;" />' . "\n" .
+							'  <button type="submit">Sign me up</button>' . "\n" .
+							'  <div class="bcsend-subscribe-form-message" aria-live="polite"></div>' . "\n" .
+							'</form>',
+							$bcsend_subscribe_rest_url
+						);
+						?>
+						<textarea readonly rows="11" class="large-text code" spellcheck="false" onclick="this.select();"><?php echo esc_textarea( $bcsend_custom_html_snippet ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'Required: the bcsend-subscribe-form class, the data-bcsend-rest-url attribute, an email field, and a consent checkbox. first_name, last_name, list_ids (defaults to the lists above when empty), the honeypot anti-spam field, and the message div are optional.', 'beacon-campaign-sender' ); ?></p>
 					</td>
 				</tr>
 				<tr>
@@ -655,14 +707,20 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 					<td>
 						<select id="bcsend-anthropic-model"
 								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[anthropic_model]">
+							<option value="claude-opus-4-8" <?php selected( $settings['anthropic_model'], 'claude-opus-4-8' ); ?>>
+								<?php esc_html_e( 'Claude Opus 4.8 (Most capable)', 'beacon-campaign-sender' ); ?>
+							</option>
+							<option value="claude-opus-4-7" <?php selected( $settings['anthropic_model'], 'claude-opus-4-7' ); ?>>
+								<?php esc_html_e( 'Claude Opus 4.7', 'beacon-campaign-sender' ); ?>
+							</option>
 							<option value="claude-sonnet-4-6" <?php selected( $settings['anthropic_model'], 'claude-sonnet-4-6' ); ?>>
 								<?php esc_html_e( 'Claude Sonnet 4.6 (Recommended)', 'beacon-campaign-sender' ); ?>
 							</option>
-							<option value="claude-opus-4-6" <?php selected( $settings['anthropic_model'], 'claude-opus-4-6' ); ?>>
-								<?php esc_html_e( 'Claude Opus 4.6', 'beacon-campaign-sender' ); ?>
-							</option>
 							<option value="claude-haiku-4-5-20251001" <?php selected( $settings['anthropic_model'], 'claude-haiku-4-5-20251001' ); ?>>
 								<?php esc_html_e( 'Claude Haiku 4.5 (Faster, lower cost)', 'beacon-campaign-sender' ); ?>
+							</option>
+							<option value="claude-opus-4-6" <?php selected( $settings['anthropic_model'], 'claude-opus-4-6' ); ?>>
+								<?php esc_html_e( 'Claude Opus 4.6 (Legacy)', 'beacon-campaign-sender' ); ?>
 							</option>
 						</select>
 					</td>
@@ -694,6 +752,9 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 					<td>
 						<select id="bcsend-openai-model"
 								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[openai_model]">
+							<option value="gpt-5.5" <?php selected( $settings['openai_model'], 'gpt-5.5' ); ?>>
+								<?php esc_html_e( 'GPT-5.5 (Most capable)', 'beacon-campaign-sender' ); ?>
+							</option>
 							<option value="gpt-5.4" <?php selected( $settings['openai_model'], 'gpt-5.4' ); ?>>
 								<?php esc_html_e( 'GPT-5.4 (Recommended)', 'beacon-campaign-sender' ); ?>
 							</option>
@@ -702,9 +763,6 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 							</option>
 							<option value="gpt-5-mini" <?php selected( $settings['openai_model'], 'gpt-5-mini' ); ?>>
 								<?php esc_html_e( 'GPT-5 mini', 'beacon-campaign-sender' ); ?>
-							</option>
-							<option value="gpt-4.1-mini" <?php selected( $settings['openai_model'], 'gpt-4.1-mini' ); ?>>
-								<?php esc_html_e( 'GPT-4.1 mini', 'beacon-campaign-sender' ); ?>
 							</option>
 						</select>
 					</td>

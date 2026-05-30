@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Beacon Campaign Sender
  * Description: Email and push notification campaign manager with AI content generation, Brevo integration, and Firebase push delivery.
- * Version: 1.0.2
+ * Version: 1.0.3
  * Author: Joe Campbell
  * Author URI: https://aisystemadmin.com/joe-campbell/
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants.
-define( 'BCSEND_VERSION', '1.0.2' );
+define( 'BCSEND_VERSION', '1.0.3' );
 define( 'BCSEND_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BCSEND_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'BCSEND_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );

@@ -33,7 +33,8 @@ class Bcsend_OpenAI_API {
 			$this->api_key = '';
 		}
 
-		$this->model = isset( $settings['openai_model'] ) && ! empty( $settings['openai_model'] )
+		$allowed_models = array( 'gpt-5.5', 'gpt-5.4', 'gpt-5.2', 'gpt-5-mini' );
+		$this->model    = isset( $settings['openai_model'] ) && in_array( $settings['openai_model'], $allowed_models, true )
 			? $settings['openai_model']
 			: 'gpt-5.4';
 	}

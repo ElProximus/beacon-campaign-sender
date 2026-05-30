@@ -22,6 +22,7 @@ class Bcsend_Subscribe_Endpoint {
 	 */
 	public static function init() {
 		add_shortcode( 'bcsend_subscribe_form', array( __CLASS__, 'render_shortcode' ) );
+		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'enqueue_frontend_assets' ) );
 	}
 
 	/**
@@ -173,6 +174,7 @@ class Bcsend_Subscribe_Endpoint {
 				'button_text' => __( 'Sign me up', 'beacon-campaign-sender' ),
 				'show_names'  => 'true',
 				'list_ids'    => '',
+				'class'       => '',
 			),
 			$atts,
 			'bcsend_subscribe_form'
@@ -182,6 +184,12 @@ class Bcsend_Subscribe_Endpoint {
 		$show_names   = filter_var( $atts['show_names'], FILTER_VALIDATE_BOOLEAN );
 		$terms_markup = self::get_terms_fine_print_markup();
 		$style_class  = 'inline' === $atts['style'] ? 'bcsend-subscribe-form-inline' : 'bcsend-subscribe-form-card';
+
+		$extra_classes = array_filter( array_map( 'sanitize_html_class', preg_split( '/\s+/', trim( (string) $atts['class'] ) ) ) );
+		if ( ! empty( $extra_classes ) ) {
+			$style_class .= ' ' . implode( ' ', $extra_classes );
+		}
+
 		$rest_url     = esc_url( rest_url( 'beacon-campaign-sender/v1/subscribe' ) );
 		$list_ids     = self::sanitize_list_ids( $atts['list_ids'] );
 		self::enqueue_shortcode_assets();
@@ -223,7 +231,42 @@ class Bcsend_Subscribe_Endpoint {
 	}
 
 	/**
-	 * Enqueue shortcode assets using WordPress APIs.
+	 * Enqueue the front-end subscribe assets.
+	 *
+	 * The submit handler is loaded site-wide (not only with the shortcode) so
+	 * visitor-built custom HTML forms using the documented markup also submit
+	 * correctly. The handler is delegated, so it does nothing until a matching
+	 * form is submitted.
+	 *
+	 * Saved custom CSS is loaded site-wide too, but only on pages whose content
+	 * does not contain the shortcode. Shortcode pages load the same custom CSS
+	 * from render (after the default styles, so it overrides them); skipping it
+	 * here avoids duplicating the inline style on those pages.
+	 *
+	 * @return void
+	 */
+	public static function enqueue_frontend_assets() {
+		wp_register_script( 'bcsend-subscribe-form', false, array(), BCSEND_VERSION, true );
+		wp_enqueue_script( 'bcsend-subscribe-form' );
+		wp_add_inline_script(
+			'bcsend-subscribe-form',
+			'document.addEventListener("submit",async function(event){var form=event.target.closest(".bcsend-subscribe-form");if(!form){return;}event.preventDefault();var button=form.querySelector("button[type=\\"submit\\"]");var message=form.querySelector(".bcsend-subscribe-form-message");var get=function(name){var field=form.querySelector("[name=\\""+name+"\\"]");return field?field.value:"";};var payload={first_name:get("first_name"),last_name:get("last_name"),email:get("email"),consent:!!(form.querySelector("[name=\\"consent\\"]")&&form.querySelector("[name=\\"consent\\"]").checked),honeypot:get("honeypot"),list_ids:get("list_ids")};if(button){button.disabled=true;}if(message){message.textContent="";message.classList.remove("is-success","is-error");}try{var response=await fetch(form.getAttribute("data-bcsend-rest-url"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});var data=await response.json();if(message){message.textContent=data.message||"";message.classList.add(response.ok?"is-success":"is-error");}if(response.ok){form.reset();}}catch(error){if(message){message.textContent=form.getAttribute("data-bcsend-error")||"Something went wrong. Please try again.";message.classList.add("is-error");}}finally{if(button){button.disabled=false;}}});'
+		);
+
+		$custom_css = self::get_subscribe_custom_css();
+		if ( '' !== $custom_css && ! self::content_has_subscribe_shortcode() ) {
+			wp_register_style( 'bcsend-subscribe-form-custom', false, array(), BCSEND_VERSION );
+			wp_enqueue_style( 'bcsend-subscribe-form-custom' );
+			wp_add_inline_style( 'bcsend-subscribe-form-custom', $custom_css );
+		}
+	}
+
+	/**
+	 * Enqueue shortcode styles: the built-in defaults plus any admin custom CSS.
+	 *
+	 * Custom CSS is appended after the defaults so its rules win on equal
+	 * specificity. Styles load only where the shortcode renders; custom HTML
+	 * embeds bring their own styling.
 	 *
 	 * @return void
 	 */
@@ -235,12 +278,39 @@ class Bcsend_Subscribe_Endpoint {
 			'.bcsend-subscribe-form{max-width:680px;margin:0 auto;padding:24px;border:1px solid #d0d5dd;border-radius:18px;background:#f2f4f7;display:grid;gap:12px}.bcsend-subscribe-form-inline{background:transparent;border:none;padding:0;margin:0 auto}.bcsend-subscribe-form-row{display:flex;gap:12px;flex-wrap:wrap}.bcsend-subscribe-form-row input[type="text"],.bcsend-subscribe-form-row input[type="email"]{flex:1 1 220px;padding:12px 14px;border:1px solid #c9d3de;border-radius:12px}.bcsend-subscribe-form-consent label{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.5;color:#344054}.bcsend-subscribe-form-consent input[type="checkbox"]{margin-top:3px}.bcsend-subscribe-form-fine-print{font-size:12px;line-height:1.6;color:#475467}.bcsend-subscribe-form-fine-print a{color:#175cd3}.bcsend-subscribe-form-honeypot{position:absolute;left:-9999px;opacity:0;pointer-events:none}.bcsend-subscribe-form-message{font-size:14px}.bcsend-subscribe-form-message.is-error{color:#b42318}.bcsend-subscribe-form-message.is-success{color:#067647}'
 		);
 
-		wp_register_script( 'bcsend-subscribe-form', false, array(), BCSEND_VERSION, true );
-		wp_enqueue_script( 'bcsend-subscribe-form' );
-		wp_add_inline_script(
-			'bcsend-subscribe-form',
-			'document.addEventListener("submit",async function(event){var form=event.target.closest(".bcsend-subscribe-form");if(!form){return;}event.preventDefault();var button=form.querySelector("button[type=\\"submit\\"]");var message=form.querySelector(".bcsend-subscribe-form-message");var get=function(name){var field=form.querySelector("[name=\\""+name+"\\"]");return field?field.value:"";};var payload={first_name:get("first_name"),last_name:get("last_name"),email:get("email"),consent:!!(form.querySelector("[name=\\"consent\\"]")&&form.querySelector("[name=\\"consent\\"]").checked),honeypot:get("honeypot"),list_ids:get("list_ids")};if(button){button.disabled=true;}if(message){message.textContent="";message.className="bcsend-subscribe-form-message";}try{var response=await fetch(form.getAttribute("data-bcsend-rest-url"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});var data=await response.json();if(message){message.textContent=data.message||"";message.classList.add(response.ok?"is-success":"is-error");}if(response.ok){form.reset();}}catch(error){if(message){message.textContent=form.getAttribute("data-bcsend-error")||"Something went wrong. Please try again.";message.classList.add("is-error");}}finally{if(button){button.disabled=false;}}});'
-		);
+		$custom_css = self::get_subscribe_custom_css();
+		if ( '' !== $custom_css ) {
+			wp_add_inline_style( 'bcsend-subscribe-form', $custom_css );
+		}
+	}
+
+	/**
+	 * Resolve the admin-saved custom CSS for the subscribe form.
+	 *
+	 * @return string
+	 */
+	private static function get_subscribe_custom_css() {
+		$settings = self::get_frontend_settings();
+
+		return isset( $settings['subscribe_custom_css'] ) ? trim( (string) $settings['subscribe_custom_css'] ) : '';
+	}
+
+	/**
+	 * Whether the current singular content contains the subscribe shortcode.
+	 *
+	 * Used to decide whether custom CSS is already loaded by the shortcode
+	 * render, so the site-wide enqueue can avoid duplicating it.
+	 *
+	 * @return bool
+	 */
+	private static function content_has_subscribe_shortcode() {
+		if ( ! is_singular() ) {
+			return false;
+		}
+
+		$post = get_post();
+
+		return $post instanceof WP_Post && has_shortcode( (string) $post->post_content, 'bcsend_subscribe_form' );
 	}
 
 	/**
@@ -308,6 +378,7 @@ class Bcsend_Subscribe_Endpoint {
 				'subscribe_terms_url'       => home_url( '/terms-of-service/' ),
 				'subscribe_terms_text'      => __( 'By signing up, you agree to our', 'beacon-campaign-sender' ),
 				'subscribe_terms_link_text' => __( 'Terms of Service', 'beacon-campaign-sender' ),
+				'subscribe_custom_css'      => '',
 			)
 		);
 	}

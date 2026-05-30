@@ -103,6 +103,8 @@ class Bcsend_Settings {
 		$sanitized['subscribe_terms_url']       = isset( $input['subscribe_terms_url'] ) ? esc_url_raw( $input['subscribe_terms_url'] ) : home_url( '/terms-of-service/' );
 		$sanitized['subscribe_terms_text']      = isset( $input['subscribe_terms_text'] ) ? sanitize_text_field( $input['subscribe_terms_text'] ) : __( 'By signing up, you agree to our', 'beacon-campaign-sender' );
 		$sanitized['subscribe_terms_link_text'] = isset( $input['subscribe_terms_link_text'] ) ? sanitize_text_field( $input['subscribe_terms_link_text'] ) : __( 'Terms of Service', 'beacon-campaign-sender' );
+		// Strip tags so custom CSS cannot break out of the <style> wrapper; line breaks are preserved.
+		$sanitized['subscribe_custom_css']      = isset( $input['subscribe_custom_css'] ) ? trim( wp_strip_all_tags( (string) $input['subscribe_custom_css'] ) ) : '';
 
 		// Push settings.
 		$sanitized['push_mode']                     = isset( $input['push_mode'] ) && in_array( $input['push_mode'], array( 'auto', 'manual' ), true ) ? $input['push_mode'] : 'auto';
@@ -129,14 +131,14 @@ class Bcsend_Settings {
 
 		$sanitized['anthropic_api_key'] = isset( $input['anthropic_api_key'] ) ? sanitize_text_field( $input['anthropic_api_key'] ) : '';
 
-		$allowed_models               = array( 'claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001' );
+		$allowed_models               = array( 'claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6' );
 		$sanitized['anthropic_model'] = isset( $input['anthropic_model'] ) && in_array( $input['anthropic_model'], $allowed_models, true )
 			? $input['anthropic_model']
 			: 'claude-sonnet-4-6';
 
 		$sanitized['openai_api_key'] = isset( $input['openai_api_key'] ) ? sanitize_text_field( $input['openai_api_key'] ) : '';
 
-		$allowed_openai_models     = array( 'gpt-5.4', 'gpt-5.2', 'gpt-5-mini', 'gpt-4.1-mini' );
+		$allowed_openai_models     = array( 'gpt-5.5', 'gpt-5.4', 'gpt-5.2', 'gpt-5-mini' );
 		$sanitized['openai_model'] = isset( $input['openai_model'] ) && in_array( $input['openai_model'], $allowed_openai_models, true )
 			? $input['openai_model']
 			: 'gpt-5.4';
@@ -271,6 +273,7 @@ class Bcsend_Settings {
 			'subscribe_terms_url'           => home_url( '/terms-of-service/' ),
 			'subscribe_terms_text'          => __( 'By signing up, you agree to our', 'beacon-campaign-sender' ),
 			'subscribe_terms_link_text'     => __( 'Terms of Service', 'beacon-campaign-sender' ),
+			'subscribe_custom_css'          => '',
 		);
 
 		$settings = wp_parse_args( $settings, $defaults );

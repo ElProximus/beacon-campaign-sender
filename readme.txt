@@ -4,7 +4,7 @@ Tags: email, newsletter, push notifications, ai, marketing
 Requires at least: 5.8
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -177,6 +177,13 @@ Beacon Campaign Sender stores subscriber sign-up records and email logs locally 
 The plugin integrates with WordPress personal data exporters and erasers for locally stored subscriber and email log records.
 
 == Changelog ==
+
+= 1.0.5 =
+- Added a Settings > Access tab to grant campaign access (Dashboard, Composer, and Campaign Queue) to existing Author-or-higher users without making them administrators.
+- Assigned non-admin users get a streamlined, mobile-friendly campaign workspace with the WordPress admin sidebar, toolbar, and footer hidden on those screens, plus quick links back to WP Admin, their profile, and log out.
+- Made the Composer mobile-responsive so campaigns can be created and sent from a phone.
+- Hardened API key handling: saved secrets (Brevo, Zernio, Anthropic, OpenAI, and the Firebase service account) are no longer printed back into the settings form and are only overwritten when you explicitly choose to replace them, ignoring browser autofill.
+- Retired the separate Campaign Manager role in favor of the per-user Access settings.
 
 = 1.0.4 =
 - Added an "Enable signup forms" setting (on by default). When unchecked, the [bcsend_subscribe_form] shortcode renders nothing, the submit script and form CSS no longer load, and the subscribe endpoint rejects submissions.

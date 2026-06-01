@@ -388,6 +388,15 @@ class Bcsend_Activator {
 	}
 
 	/**
+	 * Public wrapper for capability registration so upgrades self-heal.
+	 *
+	 * @return void
+	 */
+	public static function register_capabilities_public() {
+		self::register_capabilities();
+	}
+
+	/**
 	 * Ensure campaign schema includes required upgraded columns.
 	 *
 	 * @since 1.0.0
@@ -499,9 +508,12 @@ class Bcsend_Activator {
 	private static function register_capabilities() {
 		$admin_role = get_role( 'administrator' );
 
-		if ( $admin_role ) {
+		// No-op when the admin role already carries the caps, so the self-heal
+		// on every admin_init stays cheap.
+		if ( $admin_role && ! $admin_role->has_cap( 'operate_bcsend_campaigns' ) ) {
 			$admin_role->add_cap( 'manage_bcsend' );
 			$admin_role->add_cap( 'edit_bcsend_campaigns' );
+			$admin_role->add_cap( 'operate_bcsend_campaigns' );
 			$admin_role->add_cap( 'view_bcsend_logs' );
 		}
 	}

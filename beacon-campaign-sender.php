@@ -157,6 +157,18 @@ function bcsend_get_campaign_reply_to( $campaign_reply_to = '' ) {
 }
 
 /**
+ * Determine whether the current user should be treated as a campaign workspace user.
+ *
+ * @return bool
+ */
+function bcsend_is_campaign_manager_user() {
+	return current_user_can( 'edit_bcsend_campaigns' )
+		&& current_user_can( 'operate_bcsend_campaigns' )
+		&& ! current_user_can( 'manage_bcsend' )
+		&& ! current_user_can( 'manage_options' );
+}
+
+/**
  * Main Beacon Campaign Sender Class
  *
  * @since 1.0.0
@@ -447,12 +459,7 @@ final class Bcsend_Plugin {
 		self::sanitize_zernio_webhook_diagnostics();
 
 		// Self-heal capabilities if they're missing (e.g. plugin uploaded while active).
-		$admin_role = get_role( 'administrator' );
-		if ( $admin_role && ! $admin_role->has_cap( 'manage_bcsend' ) ) {
-			$admin_role->add_cap( 'manage_bcsend' );
-			$admin_role->add_cap( 'edit_bcsend_campaigns' );
-			$admin_role->add_cap( 'view_bcsend_logs' );
-		}
+		Bcsend_Activator::register_capabilities_public();
 
 		$settings = get_option( 'bcsend_settings', array() );
 		if ( isset( $settings['push_source'] ) || isset( $settings['push_method'] ) ) {

@@ -72,7 +72,8 @@ class Bcsend_Settings {
 	 * @since 1.0.0
 	 */
 	public function render() {
-		$settings = self::get_settings();
+		$settings     = self::get_settings();
+		$access_users = self::get_campaign_access_users();
 		include plugin_dir_path( __FILE__ ) . 'views/settings.php';
 	}
 
@@ -93,7 +94,7 @@ class Bcsend_Settings {
 		$existing  = get_option( self::OPTION_NAME, array() );
 
 		// Brevo settings.
-		$sanitized['brevo_api_key']             = isset( $input['brevo_api_key'] ) ? sanitize_text_field( $input['brevo_api_key'] ) : '';
+		$sanitized['brevo_api_key']             = $this->sanitize_secret_field( $input, $existing, 'brevo_api_key' );
 		$sanitized['brevo_sender_name']         = isset( $input['brevo_sender_name'] ) ? sanitize_text_field( $input['brevo_sender_name'] ) : '';
 		$sanitized['brevo_sender_email']        = isset( $input['brevo_sender_email'] ) ? sanitize_email( $input['brevo_sender_email'] ) : '';
 		$sanitized['reply_to_email']            = isset( $input['reply_to_email'] ) ? sanitize_email( $input['reply_to_email'] ) : '';
@@ -109,13 +110,13 @@ class Bcsend_Settings {
 
 		// Push settings.
 		$sanitized['push_mode']                     = isset( $input['push_mode'] ) && in_array( $input['push_mode'], array( 'auto', 'manual' ), true ) ? $input['push_mode'] : 'auto';
-		$sanitized['firebase_service_account_json'] = isset( $input['firebase_service_account_json'] ) ? sanitize_textarea_field( $input['firebase_service_account_json'] ) : '';
+		$sanitized['firebase_service_account_json'] = $this->sanitize_secret_field( $input, $existing, 'firebase_service_account_json', 'textarea' );
 		$sanitized['firebase_project_id']           = isset( $input['firebase_project_id'] ) ? sanitize_text_field( $input['firebase_project_id'] ) : '';
 
 		// Zernio settings.
-		$sanitized['zernio_api_key']         = isset( $input['zernio_api_key'] ) ? sanitize_text_field( $input['zernio_api_key'] ) : '';
+		$sanitized['zernio_api_key']         = $this->sanitize_secret_field( $input, $existing, 'zernio_api_key' );
 		$sanitized['zernio_profile_id']      = isset( $input['zernio_profile_id'] ) ? sanitize_text_field( $input['zernio_profile_id'] ) : '';
-		$sanitized['zernio_webhook_secret']  = isset( $input['zernio_webhook_secret'] ) ? sanitize_text_field( $input['zernio_webhook_secret'] ) : '';
+		$sanitized['zernio_webhook_secret']  = $this->sanitize_secret_field( $input, $existing, 'zernio_webhook_secret' );
 		$sanitized['zernio_webhook_enabled'] = isset( $input['zernio_webhook_enabled'] ) ? 1 : 0;
 		$sanitized['zernio_post_mode']       = isset( $input['zernio_post_mode'] ) && in_array( $input['zernio_post_mode'], array( 'single', 'per_platform' ), true ) ? $input['zernio_post_mode'] : 'single';
 
@@ -130,14 +131,14 @@ class Bcsend_Settings {
 			? $input['ai_provider']
 			: 'anthropic';
 
-		$sanitized['anthropic_api_key'] = isset( $input['anthropic_api_key'] ) ? sanitize_text_field( $input['anthropic_api_key'] ) : '';
+		$sanitized['anthropic_api_key'] = $this->sanitize_secret_field( $input, $existing, 'anthropic_api_key' );
 
 		$allowed_models               = array( 'claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6' );
 		$sanitized['anthropic_model'] = isset( $input['anthropic_model'] ) && in_array( $input['anthropic_model'], $allowed_models, true )
 			? $input['anthropic_model']
 			: 'claude-sonnet-4-6';
 
-		$sanitized['openai_api_key'] = isset( $input['openai_api_key'] ) ? sanitize_text_field( $input['openai_api_key'] ) : '';
+		$sanitized['openai_api_key'] = $this->sanitize_secret_field( $input, $existing, 'openai_api_key' );
 
 		$allowed_openai_models     = array( 'gpt-5.5', 'gpt-5.4', 'gpt-5.2', 'gpt-5-mini' );
 		$sanitized['openai_model'] = isset( $input['openai_model'] ) && in_array( $input['openai_model'], $allowed_openai_models, true )
@@ -160,17 +161,7 @@ class Bcsend_Settings {
 			? $input['email_log_detail_level']
 			: 'minimal';
 
-		// Preserve existing encrypted values if fields were left blank (password fields).
-		foreach ( self::$encrypted_fields as $field ) {
-			if ( empty( $sanitized[ $field ] ) && ! empty( $existing[ $field ] ) ) {
-				$sanitized[ $field ] = $existing[ $field ];
-			}
-		}
-
-		$effective_api_key = isset( $input['brevo_api_key'] ) ? sanitize_text_field( $input['brevo_api_key'] ) : '';
-		if ( '' === $effective_api_key && ! empty( $existing['brevo_api_key'] ) ) {
-			$effective_api_key = (string) Bcsend_Encryption::decrypt( $existing['brevo_api_key'] );
-		}
+		$effective_api_key = $this->get_plain_secret_value( $sanitized['brevo_api_key'] );
 
 		if ( ! empty( $sanitized['smtp_routing_enabled'] ) && ! empty( $sanitized['brevo_sender_email'] ) && ! empty( $effective_api_key ) ) {
 			$existing_email   = isset( $existing['brevo_sender_email'] ) ? $existing['brevo_sender_email'] : '';
@@ -186,15 +177,8 @@ class Bcsend_Settings {
 			}
 		}
 
-		$effective_zernio_api_key = isset( $input['zernio_api_key'] ) ? sanitize_text_field( $input['zernio_api_key'] ) : '';
-		if ( '' === $effective_zernio_api_key && ! empty( $existing['zernio_api_key'] ) ) {
-			$effective_zernio_api_key = (string) Bcsend_Encryption::decrypt( $existing['zernio_api_key'] );
-		}
-
-		$effective_zernio_webhook_secret = isset( $input['zernio_webhook_secret'] ) ? sanitize_text_field( $input['zernio_webhook_secret'] ) : '';
-		if ( '' === $effective_zernio_webhook_secret && ! empty( $existing['zernio_webhook_secret'] ) ) {
-			$effective_zernio_webhook_secret = (string) Bcsend_Encryption::decrypt( $existing['zernio_webhook_secret'] );
-		}
+		$effective_zernio_api_key         = $this->get_plain_secret_value( $sanitized['zernio_api_key'] );
+		$effective_zernio_webhook_secret  = $this->get_plain_secret_value( $sanitized['zernio_webhook_secret'] );
 
 		if ( ! empty( $effective_zernio_api_key ) && ! empty( $effective_zernio_webhook_secret ) ) {
 			$webhook_sync = Bcsend_Plugin::sync_zernio_webhook_settings(
@@ -229,7 +213,185 @@ class Bcsend_Settings {
 		// Encrypt sensitive fields.
 		$sanitized = Bcsend_Encryption::encrypt_settings( $sanitized );
 
+		if ( ! empty( $input['campaign_access_save'] ) ) {
+			$this->sync_campaign_access_users( $input );
+		}
+
 		return $sanitized;
+	}
+
+	/**
+	 * Sanitize a saved secret field using explicit replacement intent.
+	 *
+	 * @param array  $input    Raw settings input.
+	 * @param array  $existing Existing stored settings.
+	 * @param string $field    Secret field key.
+	 * @param string $type     Sanitizer type: text or textarea.
+	 * @return string
+	 */
+	private function sanitize_secret_field( $input, $existing, $field, $type = 'text' ) {
+		$has_existing = ! empty( $existing[ $field ] );
+		$replace_key  = 'replace_' . $field;
+		$should_save  = ! empty( $input[ $replace_key ] ) || ! $has_existing;
+
+		if ( ! $should_save ) {
+			return $has_existing ? $existing[ $field ] : '';
+		}
+
+		$value = isset( $input[ $field ] ) ? (string) $input[ $field ] : '';
+		$value = 'textarea' === $type ? sanitize_textarea_field( $value ) : sanitize_text_field( $value );
+
+		if ( '' === trim( $value ) && $has_existing ) {
+			return $existing[ $field ];
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Return a plaintext secret from a sanitized value.
+	 *
+	 * @param string $value Plaintext or encrypted value.
+	 * @return string
+	 */
+	private function get_plain_secret_value( $value ) {
+		return ! empty( $value ) ? (string) Bcsend_Encryption::decrypt( $value ) : '';
+	}
+
+	/**
+	 * Get users that should appear on the campaign access settings tab.
+	 *
+	 * @return array
+	 */
+	public static function get_campaign_access_users() {
+		$users = get_users(
+			array(
+				'orderby' => 'display_name',
+				'order'   => 'ASC',
+				'fields'  => 'all_with_meta',
+			)
+		);
+
+		$rows = array();
+		foreach ( $users as $user ) {
+			$is_full_access = self::user_has_full_plugin_access( $user );
+			$is_eligible    = self::user_is_campaign_access_eligible( $user );
+			$is_assigned    = self::user_has_campaign_access( $user );
+
+			if ( ! $is_full_access && ! $is_eligible && ! $is_assigned ) {
+				continue;
+			}
+
+			$rows[] = array(
+				'id'             => (int) $user->ID,
+				'name'           => $user->display_name ? $user->display_name : $user->user_login,
+				'email'          => $user->user_email,
+				'roles'          => self::format_user_roles( $user ),
+				'is_full_access' => $is_full_access,
+				'is_eligible'    => $is_eligible,
+				'is_assigned'    => $is_assigned,
+			);
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * Determine whether a user has full Beacon admin access.
+	 *
+	 * @param WP_User $user User object.
+	 * @return bool
+	 */
+	private static function user_has_full_plugin_access( $user ) {
+		return user_can( $user, 'manage_bcsend' ) || user_can( $user, 'manage_options' );
+	}
+
+	/**
+	 * Determine whether a user can be assigned campaign access.
+	 *
+	 * @param WP_User $user User object.
+	 * @return bool
+	 */
+	private static function user_is_campaign_access_eligible( $user ) {
+		return ! self::user_has_full_plugin_access( $user )
+			&& user_can( $user, 'edit_posts' )
+			&& user_can( $user, 'upload_files' );
+	}
+
+	/**
+	 * Determine whether a user has assigned campaign access.
+	 *
+	 * @param WP_User $user User object.
+	 * @return bool
+	 */
+	private static function user_has_campaign_access( $user ) {
+		return user_can( $user, 'edit_bcsend_campaigns' ) && user_can( $user, 'operate_bcsend_campaigns' );
+	}
+
+	/**
+	 * Format a user's roles for display.
+	 *
+	 * @param WP_User $user User object.
+	 * @return string
+	 */
+	private static function format_user_roles( $user ) {
+		$role_names = wp_roles()->role_names;
+		$labels     = array();
+
+		foreach ( (array) $user->roles as $role ) {
+			$labels[] = isset( $role_names[ $role ] ) ? translate_user_role( $role_names[ $role ] ) : $role;
+		}
+
+		return ! empty( $labels ) ? implode( ', ', $labels ) : __( 'No role', 'beacon-campaign-sender' );
+	}
+
+	/**
+	 * Add or remove per-user campaign capabilities from the Access settings tab.
+	 *
+	 * @param array $input Raw settings input.
+	 * @return void
+	 */
+	private function sync_campaign_access_users( $input ) {
+		if ( ! current_user_can( 'manage_bcsend' ) ) {
+			return;
+		}
+
+		$selected_ids = isset( $input['campaign_access_user_ids'] )
+			? array_map( 'absint', (array) $input['campaign_access_user_ids'] )
+			: array();
+		$selected_ids = array_values( array_unique( array_filter( $selected_ids ) ) );
+
+		$updated_count = 0;
+		foreach ( self::get_campaign_access_users() as $row ) {
+			$user = get_userdata( $row['id'] );
+			if ( ! $user || $row['is_full_access'] ) {
+				continue;
+			}
+
+			$should_have_access = $row['is_eligible'] && in_array( $row['id'], $selected_ids, true );
+			$has_access         = $row['is_assigned'];
+
+			if ( $should_have_access && ! $has_access ) {
+				$user->add_cap( 'edit_bcsend_campaigns' );
+				$user->add_cap( 'operate_bcsend_campaigns' );
+				++$updated_count;
+			} elseif ( ! $should_have_access && $has_access ) {
+				$user->remove_cap( 'edit_bcsend_campaigns' );
+				$user->remove_cap( 'operate_bcsend_campaigns' );
+				++$updated_count;
+			}
+		}
+
+		add_settings_error(
+			'bcsend_settings',
+			'bcsend_campaign_access_saved',
+			sprintf(
+				/* translators: %d: number of users updated */
+				_n( 'Campaign access saved. %d user updated.', 'Campaign access saved. %d users updated.', $updated_count, 'beacon-campaign-sender' ),
+				$updated_count
+			),
+			'success'
+		);
 	}
 
 	/**

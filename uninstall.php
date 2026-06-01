@@ -48,14 +48,54 @@ delete_option( 'bcsend_zernio_webhook_diagnostics' );
 delete_option( 'bcsend_zernio_webhook_url' );
 
 // ---------------------------------------------------------------------
-// 3. Remove custom capabilities from administrator role.
+// 3. Remove custom capabilities from roles and from individual users.
 // ---------------------------------------------------------------------
-$admin_role = get_role( 'administrator' );
+$bcsend_caps = array(
+	'manage_bcsend',
+	'edit_bcsend_campaigns',
+	'operate_bcsend_campaigns',
+	'view_bcsend_logs',
+);
 
-if ( $admin_role ) {
-	$admin_role->remove_cap( 'manage_bcsend' );
-	$admin_role->remove_cap( 'edit_bcsend_campaigns' );
-	$admin_role->remove_cap( 'view_bcsend_logs' );
+foreach ( wp_roles()->roles as $role_slug => $role_details ) {
+	$role = get_role( $role_slug );
+	if ( ! $role ) {
+		continue;
+	}
+
+	foreach ( $bcsend_caps as $cap ) {
+		$role->remove_cap( $cap );
+	}
+}
+
+// Strip the per-user campaign caps assigned via the Access settings tab.
+$cap_key      = $wpdb->get_blog_prefix() . 'capabilities';
+$like_clauses = array();
+$query_args   = array( $cap_key );
+
+foreach ( $bcsend_caps as $cap ) {
+	$like_clauses[] = 'meta_value LIKE %s';
+	$query_args[]   = '%' . $wpdb->esc_like( $cap ) . '%';
+}
+
+$user_ids = $wpdb->get_col(
+	$wpdb->prepare(
+		"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND (" . implode( ' OR ', $like_clauses ) . ')',
+		$query_args
+	)
+);
+
+foreach ( $user_ids as $user_id ) {
+	$caps = get_user_meta( absint( $user_id ), $cap_key, true );
+	if ( ! is_array( $caps ) ) {
+		continue;
+	}
+
+	foreach ( $bcsend_caps as $cap ) {
+		unset( $caps[ $cap ] );
+	}
+
+	update_user_meta( absint( $user_id ), $cap_key, $caps );
 }
 
 // ---------------------------------------------------------------------

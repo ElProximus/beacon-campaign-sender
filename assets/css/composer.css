@@ -1189,3 +1189,162 @@
         top: auto;
     }
 }
+
+/* ============================================================
+   28. Campaign Manager Mobile Composer Pass
+   ============================================================ */
+
+body.bcsend-focus-mode .bcsend-composer-wrap {
+    overflow-x: hidden;
+}
+
+body.bcsend-focus-mode .bcsend-panels,
+body.bcsend-focus-mode .bcsend-panel-left,
+body.bcsend-focus-mode .bcsend-panel-right,
+body.bcsend-focus-mode .bcsend-preview-container,
+body.bcsend-focus-mode .bcsend-code-container {
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+@media screen and (max-width: 782px) {
+    body.bcsend-focus-mode .bcsend-composer-wrap .bcsend-page-header {
+        margin-bottom: 12px;
+    }
+
+    body.bcsend-focus-mode .bcsend-panels {
+        flex-direction: column;
+        gap: 14px;
+        width: 100%;
+    }
+
+    body.bcsend-focus-mode .bcsend-panel-right {
+        order: 1;
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+        position: static;
+    }
+
+    body.bcsend-focus-mode .bcsend-panel-left {
+        order: 2;
+        width: 100%;
+        max-height: none;
+    }
+
+    body.bcsend-focus-mode .bcsend-panel-right > .bcsend-field-group,
+    body.bcsend-focus-mode .bcsend-content-library {
+        padding: 14px;
+        margin-bottom: 12px;
+        border-radius: 8px;
+    }
+
+    body.bcsend-focus-mode .bcsend-panel-right > .bcsend-field-group > h3,
+    body.bcsend-focus-mode .bcsend-content-library .bcsend-cl-header {
+        margin: -14px -14px 12px;
+        padding: 12px 14px;
+        border-radius: 8px 8px 0 0;
+    }
+
+    body.bcsend-focus-mode .bcsend-field-group label {
+        font-size: 13px;
+    }
+
+    body.bcsend-focus-mode .bcsend-field-group input[type="text"],
+    body.bcsend-focus-mode .bcsend-field-group input[type="email"],
+    body.bcsend-focus-mode .bcsend-field-group input[type="date"],
+    body.bcsend-focus-mode .bcsend-field-group input[type="time"],
+    body.bcsend-focus-mode .bcsend-field-group textarea,
+    body.bcsend-focus-mode .bcsend-field-group select,
+    body.bcsend-focus-mode .bcsend-cl-search,
+    body.bcsend-focus-mode .bcsend-cl-type-select {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    body.bcsend-focus-mode .bcsend-cl-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    body.bcsend-focus-mode .bcsend-cl-tab {
+        flex: 0 0 auto;
+        min-width: 104px;
+        min-height: 44px;
+        padding: 10px 12px;
+    }
+
+    body.bcsend-focus-mode .bcsend-cl-search-row,
+    body.bcsend-focus-mode .bcsend-cl-media-actions,
+    body.bcsend-focus-mode .bcsend-generate-row,
+    body.bcsend-focus-mode .bcsend-schedule-inputs,
+    body.bcsend-focus-mode .bcsend-code-header,
+    body.bcsend-focus-mode .bcsend-code-header-actions {
+        flex-wrap: wrap;
+    }
+
+    body.bcsend-focus-mode .bcsend-schedule-inputs input,
+    body.bcsend-focus-mode .bcsend-schedule-inputs .bcsend-tz-label,
+    body.bcsend-focus-mode .bcsend-code-header-actions .button {
+        flex: 1 1 100%;
+    }
+
+    body.bcsend-focus-mode .bcsend-email-preview-iframe {
+        min-height: 260px;
+    }
+
+    body.bcsend-focus-mode .bcsend-code-editor {
+        min-height: 220px;
+        font-size: 13px;
+    }
+
+    body.bcsend-focus-mode .bcsend-phone-mockup {
+        width: min(100%, 220px);
+        margin: 0 auto;
+    }
+
+    body.bcsend-focus-mode .bcsend-social-platform-row,
+    body.bcsend-focus-mode .bcsend-social-account-row,
+    body.bcsend-focus-mode .bcsend-selected-product-card,
+    body.bcsend-focus-mode .bcsend-cl-sel-item {
+        min-width: 0;
+    }
+
+    body.bcsend-focus-mode .bcsend-composer-bottom-bar {
+        position: sticky;
+        bottom: 0;
+        z-index: 200;
+        margin-left: -12px;
+        margin-right: -12px;
+    }
+
+    body.bcsend-focus-mode .bcsend-bottom-bar-inner {
+        max-width: none;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    }
+
+    body.bcsend-focus-mode .bcsend-bottom-bar-inner .bcsend-inline-status {
+        flex: 1 1 100%;
+        min-height: 0;
+        margin-right: 0;
+    }
+
+    body.bcsend-focus-mode .bcsend-bottom-bar-inner .button {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 0;
+        white-space: normal;
+        text-align: center;
+    }
+
+    body.bcsend-focus-mode #bcsend-approve-schedule {
+        flex-basis: 100%;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    body.bcsend-focus-mode .bcsend-bottom-bar-inner .button {
+        flex-basis: 100%;
+    }
+}

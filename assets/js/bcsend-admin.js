@@ -37,15 +37,19 @@
     };
 
     /**
-     * Show an inline notification at the top of .bcsend-wrap.
+     * Show an inline notification in the workspace alerts area or page wrap.
      *
      * @param {string} message The notification message.
-	 * @param {string} type    One of: success, error, info, warning.
-	 */
+     * @param {string} type    One of: success, error, info, warning.
+     */
     Bcsend.notify = function(message, type) {
         type = ['success', 'error', 'info', 'warning'].indexOf(type) !== -1 ? type : 'info';
+        var $target = $('#bcsend-workspace-alerts').first();
         var $wrap = $('.bcsend-wrap').first();
-        if (!$wrap.length) {
+        if (!$target.length) {
+            $target = $wrap;
+        }
+        if (!$target.length) {
             return;
         }
 
@@ -54,7 +58,7 @@
         var $close = $('<button type="button" class="bcsend-notification-close">').text('\u00d7');
         $note.append($msg).append($close);
 
-        $wrap.prepend($note);
+        $target.prepend($note);
 
         setTimeout(function() {
             $note.addClass('is-visible');
@@ -75,6 +79,12 @@
             }, 300);
         });
     };
+
+    $(function() {
+        if ($('body').hasClass('bcsend-focus-mode')) {
+            document.documentElement.classList.remove('wp-toolbar');
+        }
+    });
 
     /**
      * Toggle loading state on a button or element.

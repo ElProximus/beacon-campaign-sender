@@ -9,6 +9,7 @@
  * @since   1.0.0
  *
  * @var array $settings Decrypted settings array from Bcsend_Settings.
+ * @var array $access_users Users shown on the Access tab.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -26,6 +27,7 @@ $settings_tabs                       = array(
 	'base-template'    => __( 'Base Template', 'beacon-campaign-sender' ),
 	'ai'               => __( 'AI', 'beacon-campaign-sender' ),
 	'abilities-bridge' => __( 'Abilities', 'beacon-campaign-sender' ),
+	'access'           => __( 'Access', 'beacon-campaign-sender' ),
 	'logs'             => __( 'Logs', 'beacon-campaign-sender' ),
 );
 $zernio_accounts            = get_option( 'bcsend_zernio_accounts', array() );
@@ -79,13 +81,25 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 						<label for="bcsend-brevo-api-key"><?php esc_html_e( 'API Key', 'beacon-campaign-sender' ); ?></label>
 					</th>
 					<td>
+						<?php if ( ! empty( $settings['brevo_api_key'] ) ) : ?>
+							<p class="description"><?php esc_html_e( 'API key saved. Leave blank to keep existing key.', 'beacon-campaign-sender' ); ?></p>
+							<label>
+								<input type="checkbox"
+										name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[replace_brevo_api_key]"
+										value="1" />
+								<?php esc_html_e( 'Replace saved API key', 'beacon-campaign-sender' ); ?>
+							</label><br />
+						<?php endif; ?>
 						<input type="password"
 								id="bcsend-brevo-api-key"
 								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[brevo_api_key]"
-								value="<?php echo esc_attr( $settings['brevo_api_key'] ); ?>"
 								class="regular-text"
-								autocomplete="off" />
-						<p class="description"><?php esc_html_e( 'Enter your Brevo (Sendinblue) API key.', 'beacon-campaign-sender' ); ?></p>
+								autocomplete="new-password"
+								data-lpignore="true"
+								data-1p-ignore="true"
+								spellcheck="false"
+								placeholder="<?php echo ! empty( $settings['brevo_api_key'] ) ? esc_attr__( 'Enter a new key only when replacing.', 'beacon-campaign-sender' ) : esc_attr__( 'Enter your Brevo API key.', 'beacon-campaign-sender' ); ?>" />
+						<p class="description"><?php esc_html_e( 'Beacon saves this encrypted and never prints the saved value back into the form.', 'beacon-campaign-sender' ); ?></p>
 					</td>
 				</tr>
 				<tr>
@@ -380,12 +394,25 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 						<label for="bcsend-firebase-json"><?php esc_html_e( 'Firebase Service Account JSON', 'beacon-campaign-sender' ); ?></label>
 					</th>
 					<td>
+						<?php if ( ! empty( $settings['firebase_service_account_json'] ) ) : ?>
+							<p class="description"><?php esc_html_e( 'Firebase credentials saved. Leave blank to keep existing credentials.', 'beacon-campaign-sender' ); ?></p>
+							<label>
+								<input type="checkbox"
+										name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[replace_firebase_service_account_json]"
+										value="1" />
+								<?php esc_html_e( 'Replace saved Firebase credentials', 'beacon-campaign-sender' ); ?>
+							</label><br />
+						<?php endif; ?>
 						<textarea id="bcsend-firebase-json"
 									name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[firebase_service_account_json]"
 									rows="10"
 									class="large-text code"
-									placeholder="<?php esc_attr_e( 'Paste your Firebase service account JSON here...', 'beacon-campaign-sender' ); ?>"><?php echo esc_textarea( $settings['firebase_service_account_json'] ); ?></textarea>
-						<p class="description"><?php esc_html_e( 'Paste the full JSON contents of your Firebase service account key file.', 'beacon-campaign-sender' ); ?></p>
+									autocomplete="new-password"
+									data-lpignore="true"
+									data-1p-ignore="true"
+									spellcheck="false"
+									placeholder="<?php echo ! empty( $settings['firebase_service_account_json'] ) ? esc_attr__( 'Paste new JSON only when replacing.', 'beacon-campaign-sender' ) : esc_attr__( 'Paste your Firebase service account JSON here...', 'beacon-campaign-sender' ); ?>"></textarea>
+						<p class="description"><?php esc_html_e( 'Paste the full JSON contents only when adding or replacing credentials.', 'beacon-campaign-sender' ); ?></p>
 					</td>
 				</tr>
 				<tr class="bcsend-push-manual-row">
@@ -420,13 +447,25 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 						<label for="bcsend-zernio-api-key"><?php esc_html_e( 'Zernio API Key', 'beacon-campaign-sender' ); ?></label>
 					</th>
 					<td>
+						<?php if ( ! empty( $settings['zernio_api_key'] ) ) : ?>
+							<p class="description"><?php esc_html_e( 'API key saved. Leave blank to keep existing key.', 'beacon-campaign-sender' ); ?></p>
+							<label>
+								<input type="checkbox"
+										name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[replace_zernio_api_key]"
+										value="1" />
+								<?php esc_html_e( 'Replace saved API key', 'beacon-campaign-sender' ); ?>
+							</label><br />
+						<?php endif; ?>
 						<input type="password"
 								id="bcsend-zernio-api-key"
 								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[zernio_api_key]"
 								class="regular-text"
-								placeholder="<?php echo ! empty( $settings['zernio_api_key'] ) ? esc_attr__( 'A value is saved. Enter a new key to replace it.', 'beacon-campaign-sender' ) : ''; ?>"
-								autocomplete="off" />
-						<p class="description"><?php esc_html_e( 'Enter your Zernio API key (Bearer token).', 'beacon-campaign-sender' ); ?></p>
+								placeholder="<?php echo ! empty( $settings['zernio_api_key'] ) ? esc_attr__( 'Enter a new key only when replacing.', 'beacon-campaign-sender' ) : esc_attr__( 'Enter your Zernio API key.', 'beacon-campaign-sender' ); ?>"
+								autocomplete="new-password"
+								data-lpignore="true"
+								data-1p-ignore="true"
+								spellcheck="false" />
+						<p class="description"><?php esc_html_e( 'Enter your Zernio API key (Bearer token). Saved keys are encrypted and not rendered back into this form.', 'beacon-campaign-sender' ); ?></p>
 					</td>
 				</tr>
 				<tr>
@@ -569,11 +608,23 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 							<?php esc_html_e( 'Enable Zernio webhook status syncing', 'beacon-campaign-sender' ); ?>
 						</label>
 						<p class="description"><?php esc_html_e( 'Choose any private secret here. Beacon Campaign Sender will save it and use it to verify that incoming webhook requests really came from Zernio. You do not need to get a secret key from Zernio. Saving settings will automatically sync the webhook configuration for you.', 'beacon-campaign-sender' ); ?></p>
+						<?php if ( ! empty( $settings['zernio_webhook_secret'] ) ) : ?>
+							<p class="description"><?php esc_html_e( 'Webhook secret saved. Leave blank to keep existing secret.', 'beacon-campaign-sender' ); ?></p>
+							<label>
+								<input type="checkbox"
+										name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[replace_zernio_webhook_secret]"
+										value="1" />
+								<?php esc_html_e( 'Replace saved webhook secret', 'beacon-campaign-sender' ); ?>
+							</label><br />
+						<?php endif; ?>
 						<input type="password"
 								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[zernio_webhook_secret]"
 								class="regular-text"
-								placeholder="<?php echo ! empty( $settings['zernio_webhook_secret'] ) ? esc_attr__( 'A value is saved. Enter a new secret to replace it.', 'beacon-campaign-sender' ) : ''; ?>"
-								autocomplete="off" />
+								placeholder="<?php echo ! empty( $settings['zernio_webhook_secret'] ) ? esc_attr__( 'Enter a new secret only when replacing.', 'beacon-campaign-sender' ) : esc_attr__( 'Enter a webhook secret.', 'beacon-campaign-sender' ); ?>"
+								autocomplete="new-password"
+								data-lpignore="true"
+								data-1p-ignore="true"
+								spellcheck="false" />
 						<p class="description">
 							<?php esc_html_e( 'Webhook endpoint:', 'beacon-campaign-sender' ); ?>
 							<code><?php echo esc_html( rest_url( 'beacon-campaign-sender/v1/zernio/webhook' ) ); ?></code>
@@ -701,13 +752,25 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 						<label for="bcsend-anthropic-api-key"><?php esc_html_e( 'Anthropic API Key', 'beacon-campaign-sender' ); ?></label>
 					</th>
 					<td>
+						<?php if ( ! empty( $settings['anthropic_api_key'] ) ) : ?>
+							<p class="description"><?php esc_html_e( 'API key saved. Leave blank to keep existing key.', 'beacon-campaign-sender' ); ?></p>
+							<label>
+								<input type="checkbox"
+										name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[replace_anthropic_api_key]"
+										value="1" />
+								<?php esc_html_e( 'Replace saved API key', 'beacon-campaign-sender' ); ?>
+							</label><br />
+						<?php endif; ?>
 						<input type="password"
 								id="bcsend-anthropic-api-key"
 								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[anthropic_api_key]"
-								value="<?php echo esc_attr( $settings['anthropic_api_key'] ); ?>"
 								class="regular-text"
-								autocomplete="off" />
-						<p class="description"><?php esc_html_e( 'Your Anthropic API key for AI-powered content generation.', 'beacon-campaign-sender' ); ?></p>
+								autocomplete="new-password"
+								data-lpignore="true"
+								data-1p-ignore="true"
+								spellcheck="false"
+								placeholder="<?php echo ! empty( $settings['anthropic_api_key'] ) ? esc_attr__( 'Enter a new key only when replacing.', 'beacon-campaign-sender' ) : esc_attr__( 'Enter your Anthropic API key.', 'beacon-campaign-sender' ); ?>" />
+						<p class="description"><?php esc_html_e( 'Your Anthropic API key for AI-powered content generation. Saved keys are encrypted and not rendered back into this form.', 'beacon-campaign-sender' ); ?></p>
 						<p>
 							<button type="button" class="button bcsend-test-connection" data-service="anthropic">
 								<?php esc_html_e( 'Test Anthropic Connection', 'beacon-campaign-sender' ); ?>
@@ -746,13 +809,25 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 						<label for="bcsend-openai-api-key"><?php esc_html_e( 'OpenAI API Key', 'beacon-campaign-sender' ); ?></label>
 					</th>
 					<td>
+						<?php if ( ! empty( $settings['openai_api_key'] ) ) : ?>
+							<p class="description"><?php esc_html_e( 'API key saved. Leave blank to keep existing key.', 'beacon-campaign-sender' ); ?></p>
+							<label>
+								<input type="checkbox"
+										name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[replace_openai_api_key]"
+										value="1" />
+								<?php esc_html_e( 'Replace saved API key', 'beacon-campaign-sender' ); ?>
+							</label><br />
+						<?php endif; ?>
 						<input type="password"
 								id="bcsend-openai-api-key"
 								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[openai_api_key]"
-								value="<?php echo esc_attr( $settings['openai_api_key'] ); ?>"
 								class="regular-text"
-								autocomplete="off" />
-						<p class="description"><?php esc_html_e( 'Your OpenAI API key for AI-powered content generation.', 'beacon-campaign-sender' ); ?></p>
+								autocomplete="new-password"
+								data-lpignore="true"
+								data-1p-ignore="true"
+								spellcheck="false"
+								placeholder="<?php echo ! empty( $settings['openai_api_key'] ) ? esc_attr__( 'Enter a new key only when replacing.', 'beacon-campaign-sender' ) : esc_attr__( 'Enter your OpenAI API key.', 'beacon-campaign-sender' ); ?>" />
+						<p class="description"><?php esc_html_e( 'Your OpenAI API key for AI-powered content generation. Saved keys are encrypted and not rendered back into this form.', 'beacon-campaign-sender' ); ?></p>
 						<p>
 							<button type="button" class="button bcsend-test-connection" data-service="openai">
 								<?php esc_html_e( 'Test OpenAI Connection', 'beacon-campaign-sender' ); ?>
@@ -845,6 +920,82 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 										</td>
 									</tr>
 								<?php endforeach; ?>
+							</tbody>
+						</table>
+					</td>
+				</tr>
+			</table>
+		</div>
+
+		<!-- Access Tab -->
+		<div class="bcsend-tab-content" <?php echo ( 'access' !== $active_tab ) ? 'style="display:none;"' : 'style="display:block;"'; ?> id="bcsend-tab-access">
+			<input type="hidden"
+					name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[campaign_access_save]"
+					value="<?php echo 'access' === $active_tab ? '1' : '0'; ?>" />
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Campaign Access', 'beacon-campaign-sender' ); ?></th>
+					<td>
+						<p class="description">
+							<?php esc_html_e( 'Assign campaign workspace access to existing WordPress users who are already Author-level or higher. Administrators have full Beacon access automatically.', 'beacon-campaign-sender' ); ?>
+						</p>
+						<table class="widefat fixed striped bcsend-access-table">
+							<thead>
+								<tr>
+									<th><?php esc_html_e( 'User', 'beacon-campaign-sender' ); ?></th>
+									<th><?php esc_html_e( 'Role', 'beacon-campaign-sender' ); ?></th>
+									<th><?php esc_html_e( 'Campaign Access', 'beacon-campaign-sender' ); ?></th>
+									<th><?php esc_html_e( 'Status', 'beacon-campaign-sender' ); ?></th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php if ( empty( $access_users ) ) : ?>
+									<tr>
+										<td colspan="4"><?php esc_html_e( 'No Author-level users are available yet.', 'beacon-campaign-sender' ); ?></td>
+									</tr>
+								<?php else : ?>
+									<?php foreach ( $access_users as $access_user ) : ?>
+										<tr>
+											<td>
+												<strong><?php echo esc_html( $access_user['name'] ); ?></strong><br />
+												<span><?php echo esc_html( $access_user['email'] ); ?></span>
+											</td>
+											<td><?php echo esc_html( $access_user['roles'] ); ?></td>
+											<td>
+												<?php if ( $access_user['is_full_access'] ) : ?>
+													<label>
+														<input type="checkbox" checked="checked" disabled="disabled" />
+														<?php esc_html_e( 'Full plugin access', 'beacon-campaign-sender' ); ?>
+													</label>
+												<?php elseif ( $access_user['is_eligible'] ) : ?>
+													<label>
+														<input type="checkbox"
+																name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[campaign_access_user_ids][]"
+																value="<?php echo esc_attr( $access_user['id'] ); ?>"
+																<?php checked( $access_user['is_assigned'] ); ?> />
+														<?php esc_html_e( 'Allow campaign workspace access', 'beacon-campaign-sender' ); ?>
+													</label>
+												<?php else : ?>
+													<label>
+														<input type="checkbox" disabled="disabled" />
+														<?php esc_html_e( 'Not eligible', 'beacon-campaign-sender' ); ?>
+													</label>
+												<?php endif; ?>
+											</td>
+											<td>
+												<?php if ( $access_user['is_full_access'] ) : ?>
+													<span class="bcsend-status-badge bcsend-status-success"><?php esc_html_e( 'Admin', 'beacon-campaign-sender' ); ?></span>
+												<?php elseif ( $access_user['is_eligible'] && $access_user['is_assigned'] ) : ?>
+													<span class="bcsend-status-badge bcsend-status-success"><?php esc_html_e( 'Assigned', 'beacon-campaign-sender' ); ?></span>
+												<?php elseif ( $access_user['is_eligible'] ) : ?>
+													<span class="bcsend-status-badge bcsend-status-inactive"><?php esc_html_e( 'Available', 'beacon-campaign-sender' ); ?></span>
+												<?php else : ?>
+													<span class="bcsend-status-badge bcsend-status-warning"><?php esc_html_e( 'Role must be Author+', 'beacon-campaign-sender' ); ?></span>
+												<?php endif; ?>
+											</td>
+										</tr>
+									<?php endforeach; ?>
+								<?php endif; ?>
 							</tbody>
 						</table>
 					</td>

@@ -64,7 +64,7 @@ add_action(
 
 				'execute_callback'    => 'bcsend_ability_send_test_email',
 				'permission_callback' => function () {
-					return current_user_can( 'manage_bcsend' );
+					return current_user_can( 'operate_bcsend_campaigns' );
 				},
 
 				'meta'                => array(

@@ -303,7 +303,7 @@ class Bcsend_Ajax_Campaigns {
 	public function ajax_approve_schedule() {
 		check_ajax_referer( 'bcsend_nonce', 'nonce' );
 
-		if ( ! current_user_can( 'manage_bcsend' ) ) {
+		if ( ! current_user_can( 'operate_bcsend_campaigns' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied. Only managers can approve campaigns.', 'beacon-campaign-sender' ) ) );
 		}
 
@@ -452,7 +452,7 @@ class Bcsend_Ajax_Campaigns {
 	public function ajax_send_campaign_preview_email() {
 		check_ajax_referer( 'bcsend_nonce', 'nonce' );
 
-		if ( ! current_user_can( 'manage_bcsend' ) ) {
+		if ( ! current_user_can( 'operate_bcsend_campaigns' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'beacon-campaign-sender' ) ) );
 		}
 
@@ -576,7 +576,7 @@ class Bcsend_Ajax_Campaigns {
 	public function ajax_revert_to_draft() {
 		check_ajax_referer( 'bcsend_nonce', 'nonce' );
 
-		if ( ! current_user_can( 'manage_bcsend' ) ) {
+		if ( ! current_user_can( 'operate_bcsend_campaigns' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'beacon-campaign-sender' ) ) );
 		}
 
@@ -640,7 +640,7 @@ class Bcsend_Ajax_Campaigns {
 	public function ajax_send_now() {
 		check_ajax_referer( 'bcsend_nonce', 'nonce' );
 
-		if ( ! current_user_can( 'manage_bcsend' ) ) {
+		if ( ! current_user_can( 'operate_bcsend_campaigns' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'beacon-campaign-sender' ) ) );
 		}
 

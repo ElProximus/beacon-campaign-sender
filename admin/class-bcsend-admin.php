@@ -21,6 +21,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Bcsend_Admin {
 
 	/**
+	 * Admin page slugs that make up the Campaign Manager workspace.
+	 *
+	 * @var string[]
+	 */
+	const WORKSPACE_PAGES = array(
+		'beacon-campaign-sender',
+		'bcsend-composer',
+		'bcsend-queue',
+	);
+
+	/**
 	 * Constructor.
 	 *
 	 * Hooks into WordPress admin initialization.
@@ -31,6 +42,12 @@ class Bcsend_Admin {
 		add_action( 'admin_menu', array( $this, 'add_menu_pages' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 		add_action( 'admin_init', array( $this, 'admin_init' ) );
+		add_action( 'current_screen', array( $this, 'suppress_workspace_notices' ), 999 );
+		add_action( 'admin_head', array( $this, 'suppress_workspace_notices' ), -9999 );
+		add_action( 'admin_notices', array( $this, 'suppress_workspace_notices' ), -9999 );
+		add_action( 'all_admin_notices', array( $this, 'suppress_workspace_notices' ), -9999 );
+		add_filter( 'admin_body_class', array( $this, 'admin_body_class' ) );
+		add_filter( 'show_admin_bar', array( $this, 'maybe_hide_admin_bar' ) );
 	}
 
 	/**
@@ -110,7 +127,7 @@ class Bcsend_Admin {
 			'beacon-campaign-sender',
 			__( 'Templates', 'beacon-campaign-sender' ),
 			__( 'Templates', 'beacon-campaign-sender' ),
-			'edit_bcsend_campaigns',
+			'manage_bcsend',
 			'bcsend-templates',
 			array( $this, 'render_templates' )
 		);
@@ -119,7 +136,7 @@ class Bcsend_Admin {
 			'beacon-campaign-sender',
 			__( 'Analytics', 'beacon-campaign-sender' ),
 			__( 'Analytics', 'beacon-campaign-sender' ),
-			'edit_bcsend_campaigns',
+			'manage_bcsend',
 			'bcsend-analytics',
 			array( $this, 'render_analytics' )
 		);
@@ -172,6 +189,166 @@ class Bcsend_Admin {
 	}
 
 	/**
+	 * Determine whether the current user should get the Beacon workspace shell.
+	 *
+	 * @return bool
+	 */
+	private function is_campaign_manager_user() {
+		return bcsend_is_campaign_manager_user();
+	}
+
+	/**
+	 * Get the current Beacon admin page slug.
+	 *
+	 * @return string
+	 */
+	private function get_current_page() {
+		return isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+	}
+
+	/**
+	 * Determine whether the current request is one of the workspace pages.
+	 *
+	 * @return bool
+	 */
+	private function is_workspace_page() {
+		return in_array( $this->get_current_page(), self::WORKSPACE_PAGES, true );
+	}
+
+	/**
+	 * Add body classes for the Campaign Manager workspace.
+	 *
+	 * @param string $classes Existing admin body classes.
+	 * @return string
+	 */
+	public function admin_body_class( $classes ) {
+		if ( $this->is_campaign_manager_user() && $this->is_workspace_page() ) {
+			$classes .= ' bcsend-campaign-user bcsend-focus-mode';
+		}
+
+		return $classes;
+	}
+
+	/**
+	 * Hide the admin bar on Campaign Manager workspace pages.
+	 *
+	 * @param bool $show Whether to show the admin bar.
+	 * @return bool
+	 */
+	public function maybe_hide_admin_bar( $show ) {
+		if ( $this->is_campaign_manager_user() && $this->is_workspace_page() ) {
+			return false;
+		}
+
+		return $show;
+	}
+
+	/**
+	 * Suppress generic WordPress/plugin notices in the Campaign Manager workspace.
+	 *
+	 * @return void
+	 */
+	public function suppress_workspace_notices() {
+		if ( ! $this->is_campaign_manager_user() || ! $this->is_workspace_page() ) {
+			return;
+		}
+
+		remove_all_actions( 'admin_notices' );
+		remove_all_actions( 'all_admin_notices' );
+	}
+
+	/**
+	 * Render the Campaign Manager workspace header.
+	 *
+	 * @return void
+	 */
+	private function render_workspace_header() {
+		if ( ! $this->is_campaign_manager_user() || ! $this->is_workspace_page() ) {
+			return;
+		}
+
+		$current = $this->get_current_page();
+		$links   = array(
+			'beacon-campaign-sender' => array(
+				'label' => __( 'Dashboard', 'beacon-campaign-sender' ),
+				'url'   => admin_url( 'admin.php?page=beacon-campaign-sender' ),
+			),
+			'bcsend-composer'        => array(
+				'label' => __( 'Composer', 'beacon-campaign-sender' ),
+				'url'   => admin_url( 'admin.php?page=bcsend-composer' ),
+			),
+			'bcsend-queue'           => array(
+				'label' => __( 'Campaign Queue', 'beacon-campaign-sender' ),
+				'url'   => admin_url( 'admin.php?page=bcsend-queue' ),
+			),
+		);
+
+		$status = $this->get_workspace_status();
+		?>
+		<div class="bcsend-workspace-shell-header">
+			<div class="bcsend-workspace-brand">
+				<span class="bcsend-workspace-mark" aria-hidden="true">B</span>
+				<div>
+					<span class="bcsend-workspace-kicker"><?php esc_html_e( 'Beacon Campaign Sender', 'beacon-campaign-sender' ); ?></span>
+					<strong><?php esc_html_e( 'Campaign Workspace', 'beacon-campaign-sender' ); ?></strong>
+				</div>
+			</div>
+			<nav class="bcsend-workspace-nav" aria-label="<?php esc_attr_e( 'Campaign workspace navigation', 'beacon-campaign-sender' ); ?>">
+				<?php foreach ( $links as $slug => $link ) : ?>
+					<a href="<?php echo esc_url( $link['url'] ); ?>" class="<?php echo $slug === $current ? 'is-active' : ''; ?>">
+						<?php echo esc_html( $link['label'] ); ?>
+					</a>
+				<?php endforeach; ?>
+			</nav>
+			<div class="bcsend-workspace-account">
+				<a href="<?php echo esc_url( admin_url() ); ?>"><?php esc_html_e( 'WP Admin', 'beacon-campaign-sender' ); ?></a>
+				<a href="<?php echo esc_url( admin_url( 'profile.php' ) ); ?>"><?php esc_html_e( 'Profile', 'beacon-campaign-sender' ); ?></a>
+				<a href="<?php echo esc_url( wp_logout_url( wp_login_url() ) ); ?>"><?php esc_html_e( 'Log Out', 'beacon-campaign-sender' ); ?></a>
+			</div>
+			<div id="bcsend-workspace-alerts" class="bcsend-workspace-alerts" aria-live="polite">
+				<div class="bcsend-workspace-status <?php echo ! empty( $status['ok'] ) ? 'is-ok' : 'is-warning'; ?>">
+					<span class="dashicons <?php echo ! empty( $status['ok'] ) ? 'dashicons-yes-alt' : 'dashicons-warning'; ?>" aria-hidden="true"></span>
+					<span><?php echo esc_html( $status['message'] ); ?></span>
+				</div>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Build a compact readiness status for the workspace header.
+	 *
+	 * @return array
+	 */
+	private function get_workspace_status() {
+		if ( ! class_exists( 'Bcsend_Environment' ) ) {
+			return array(
+				'ok'      => true,
+				'message' => __( 'Workspace ready', 'beacon-campaign-sender' ),
+			);
+		}
+
+		$report = Bcsend_Environment::get_instance()->get_report();
+		foreach ( $report as $check ) {
+			if ( empty( $check['result'] ) && ! empty( $check['label'] ) ) {
+				return array(
+					'ok'      => false,
+					'message' => sprintf(
+						/* translators: %s: environment check label */
+						__( 'Needs attention: %s', 'beacon-campaign-sender' ),
+						$check['label']
+					),
+				);
+			}
+		}
+
+		return array(
+			'ok'      => true,
+			'message' => __( 'All campaign systems ready', 'beacon-campaign-sender' ),
+		);
+	}
+
+	/**
 	 * Render the subscribers page.
 	 *
 	 * @return void
@@ -195,20 +372,24 @@ class Bcsend_Admin {
 
 		$plugin_url = plugin_dir_url( __DIR__ );
 		$version    = defined( 'BCSEND_VERSION' ) ? BCSEND_VERSION : '1.0.0';
+		$admin_css_path = plugin_dir_path( __DIR__ ) . 'assets/css/bcsend-admin.css';
+		$admin_js_path  = plugin_dir_path( __DIR__ ) . 'assets/js/bcsend-admin.js';
+		$admin_css_ver  = file_exists( $admin_css_path ) ? (string) filemtime( $admin_css_path ) : $version;
+		$admin_js_ver   = file_exists( $admin_js_path ) ? (string) filemtime( $admin_js_path ) : $version;
 
 		// Global admin styles and scripts for all Beacon Campaign Sender pages.
 		wp_enqueue_style(
 			'bcsend-admin',
 			$plugin_url . 'assets/css/bcsend-admin.css',
 			array(),
-			$version
+			$admin_css_ver
 		);
 
 		wp_enqueue_script(
 			'bcsend-admin',
 			$plugin_url . 'assets/js/bcsend-admin.js',
 			array( 'jquery' ),
-			$version,
+			$admin_js_ver,
 			true
 		);
 
@@ -381,6 +562,7 @@ class Bcsend_Admin {
 	 * @since 1.0.0
 	 */
 	public function render_dashboard() {
+		$this->render_workspace_header();
 		$controller = new Bcsend_Dashboard();
 		$controller->render();
 	}
@@ -391,6 +573,7 @@ class Bcsend_Admin {
 	 * @since 1.0.0
 	 */
 	public function render_composer() {
+		$this->render_workspace_header();
 		$controller = new Bcsend_Composer();
 		$controller->render();
 	}
@@ -401,6 +584,7 @@ class Bcsend_Admin {
 	 * @since 1.0.0
 	 */
 	public function render_queue() {
+		$this->render_workspace_header();
 		$controller = new Bcsend_Queue();
 		$controller->render();
 	}

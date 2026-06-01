@@ -1466,6 +1466,47 @@
     color: var(--bcsend-text-soft);
 }
 
+.bcsend-access-table {
+    margin-top: 14px;
+}
+
+.bcsend-access-table td {
+    vertical-align: middle;
+}
+
+.bcsend-access-table input[type="checkbox"] {
+    margin-top: 0;
+}
+
+.bcsend-status-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: #edf1f5;
+    color: var(--bcsend-text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.bcsend-status-success {
+    background: #e6f6ef;
+    color: #027a48;
+}
+
+.bcsend-status-warning {
+    background: #fff4df;
+    color: #946200;
+}
+
+.bcsend-status-inactive {
+    background: #eef2f6;
+    color: #53606d;
+}
+
 .bcsend-audiences-section {
     padding: 22px;
 }
@@ -1608,5 +1649,244 @@
     .bcsend-dashboard-card,
     .bcsend-card-recent-campaigns {
         padding: 18px;
+    }
+}
+
+/* ============================================================
+   35. Campaign Manager Workspace Mode
+   ============================================================ */
+
+body.bcsend-focus-mode {
+    background: #f4f7fb;
+}
+
+body.bcsend-focus-mode #adminmenumain,
+body.bcsend-focus-mode #wpadminbar,
+body.bcsend-focus-mode #wpfooter {
+    display: none !important;
+}
+
+body.bcsend-focus-mode #wpcontent,
+body.bcsend-focus-mode #wpbody-content {
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+}
+
+body.bcsend-focus-mode #wpbody-content {
+    padding-bottom: 0;
+}
+
+body.bcsend-focus-mode #wpbody-content > .notice:not(.bcsend-notice),
+body.bcsend-focus-mode #wpbody-content > .updated,
+body.bcsend-focus-mode #wpbody-content > .error,
+body.bcsend-focus-mode #wpbody-content > .update-nag {
+    display: none !important;
+}
+
+body.bcsend-focus-mode .wrap.bcsend-wrap {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 24px clamp(14px, 3vw, 36px) 36px;
+    box-sizing: border-box;
+}
+
+body.bcsend-focus-mode .bcsend-page-header {
+    margin-top: 0;
+}
+
+.bcsend-workspace-shell-header {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto auto;
+    gap: 18px;
+    align-items: center;
+    padding: 14px clamp(14px, 3vw, 36px);
+    background: #fff;
+    border-bottom: 1px solid #d8dee6;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.bcsend-workspace-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.bcsend-workspace-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: #2271b1;
+    color: #fff;
+    font-weight: 800;
+}
+
+.bcsend-workspace-kicker {
+    display: block;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.bcsend-workspace-brand strong {
+    display: block;
+    color: #0f172a;
+    font-size: 16px;
+    line-height: 1.25;
+}
+
+.bcsend-workspace-nav {
+    display: flex;
+    gap: 6px;
+    padding: 4px;
+    background: #eef4fb;
+    border: 1px solid #d8e4f0;
+    border-radius: 8px;
+}
+
+.bcsend-workspace-nav a {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    border-radius: 6px;
+    color: #1f3f5f;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.bcsend-workspace-nav a.is-active {
+    background: #fff;
+    color: #135e96;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.bcsend-workspace-account {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.bcsend-workspace-account a {
+    color: #135e96;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.bcsend-workspace-alerts {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.bcsend-workspace-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    max-width: 100%;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.bcsend-workspace-status.is-ok .dashicons {
+    color: #008a20;
+}
+
+.bcsend-workspace-status.is-warning {
+    background: #fff7ed;
+    color: #8a4b0f;
+}
+
+.bcsend-workspace-status.is-warning .dashicons {
+    color: #b45309;
+}
+
+.bcsend-workspace-alerts .bcsend-notification {
+    margin-bottom: 0;
+}
+
+body.bcsend-focus-mode .button,
+body.bcsend-focus-mode button,
+body.bcsend-focus-mode input[type="button"],
+body.bcsend-focus-mode input[type="submit"] {
+    min-height: 36px;
+}
+
+body.bcsend-focus-mode .bcsend-queue-wrap #bcsend-bulk-form,
+body.bcsend-focus-mode .bcsend-card-recent-campaigns {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+body.bcsend-focus-mode .bcsend-queue-table,
+body.bcsend-focus-mode .bcsend-card-recent-campaigns table {
+    min-width: 760px;
+}
+
+@media screen and (max-width: 900px) {
+    .bcsend-workspace-shell-header {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
+    .bcsend-workspace-nav,
+    .bcsend-workspace-account {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+}
+
+@media screen and (max-width: 782px) {
+    body.bcsend-focus-mode .wrap.bcsend-wrap {
+        padding: 14px 12px 28px;
+    }
+
+    .bcsend-workspace-shell-header {
+        padding: 12px;
+    }
+
+    .bcsend-workspace-nav {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .bcsend-workspace-nav a,
+    .bcsend-workspace-account a,
+    body.bcsend-focus-mode .button,
+    body.bcsend-focus-mode button,
+    body.bcsend-focus-mode input[type="button"],
+    body.bcsend-focus-mode input[type="submit"],
+    body.bcsend-focus-mode input[type="text"],
+    body.bcsend-focus-mode input[type="email"],
+    body.bcsend-focus-mode input[type="date"],
+    body.bcsend-focus-mode input[type="time"],
+    body.bcsend-focus-mode select,
+    body.bcsend-focus-mode textarea {
+        min-height: 44px;
+    }
+
+    body.bcsend-focus-mode .bcsend-page-actions {
+        flex-direction: column;
+    }
+
+    body.bcsend-focus-mode .bcsend-page-actions .button {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
     }
 }

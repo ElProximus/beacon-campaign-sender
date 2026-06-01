@@ -25,6 +25,7 @@
             this.bindTemplateReset();
             this.bindModelSelector();
             this.bindSmtpToggle();
+            this.bindSecretReplacements();
         },
 
         /**
@@ -426,6 +427,31 @@
                 } else {
                     $row.hide();
                 }
+            });
+        },
+
+        /**
+         * Keep saved secret fields disabled until the user explicitly replaces them.
+         */
+        bindSecretReplacements: function() {
+            $('.bcsend-settings-form input[type="checkbox"][name*="[replace_"]').each(function() {
+                var $toggle = $(this);
+                var $field = $toggle.closest('td').find('input[type="password"], textarea').last();
+
+                if (!$field.length) {
+                    return;
+                }
+
+                var syncField = function() {
+                    var isReplacing = $toggle.is(':checked');
+                    $field.prop('disabled', !isReplacing);
+                    if (!isReplacing) {
+                        $field.val('');
+                    }
+                };
+
+                syncField();
+                $toggle.on('change', syncField);
             });
         },
 

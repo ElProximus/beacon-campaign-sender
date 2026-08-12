@@ -75,9 +75,9 @@ class Bcsend_Anthropic_API {
 			$this->api_key = '';
 		}
 
-		$this->model = isset( $settings['anthropic_model'] ) && ! empty( $settings['anthropic_model'] )
+		$this->model = isset( $settings['anthropic_model'] ) && in_array( $settings['anthropic_model'], Bcsend_Model_Catalog::allowed_ids( 'anthropic' ), true )
 			? $settings['anthropic_model']
-			: 'claude-sonnet-4-6';
+			: Bcsend_Model_Catalog::default_model( 'anthropic' );
 	}
 
 	/**
@@ -126,21 +126,41 @@ class Bcsend_Anthropic_API {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param array  $messages Array of message objects ({role, content}).
-	 * @param string $system   Optional system prompt.
+	 * @param array  $messages       Array of message objects ({role, content}).
+	 * @param string $system         Optional system prompt.
+	 * @param string $model_override Optional model ID (used by the refusal fallback).
+	 * @param bool   $is_fallback    Whether this call is already the one-time fallback retry.
 	 *
 	 * @return string|WP_Error Extracted text content or WP_Error on failure.
 	 */
-	private function request( $messages, $system = '' ) {
+	private function request( $messages, $system = '', $model_override = '', $is_fallback = false ) {
+		$model = '' !== $model_override ? $model_override : $this->model;
+		$task  = Bcsend_AI_Service::get_task_context();
+
 		$body = array(
-			'model'      => $this->model,
-			'max_tokens' => self::MAX_TOKENS,
+			'model'      => $model,
+			'max_tokens' => Bcsend_Model_Catalog::max_tokens( $model, $task ),
 			'messages'   => $messages,
 		);
+
+		// Claude 5 models think by default (thinking counts against
+		// max_tokens, which the catalog budgets account for). The thinking
+		// parameter itself is never sent; effort is the catalog's cost lever.
+		$effort = Bcsend_Model_Catalog::effort( $model, $task );
+		if ( '' !== $effort ) {
+			$body['output_config'] = array( 'effort' => $effort );
+		}
 
 		if ( ! empty( $system ) ) {
 			$body['system'] = $system;
 		}
+
+		Bcsend_AI_Service::record_generation_meta(
+			array(
+				'effective_model' => $model,
+				'fallback_used'   => $is_fallback,
+			)
+		);
 
 		$args = array(
 			'method'  => 'POST',
@@ -150,7 +170,14 @@ class Bcsend_Anthropic_API {
 				'content-type'      => 'application/json',
 			),
 			'body'    => wp_json_encode( $body ),
-			'timeout' => 120,
+			/**
+			 * Filter the AI request timeout. Background job workers raise this
+			 * (they are not bound by a browser connection); the job lease is
+			 * derived from the same filter so the two can never disagree.
+			 *
+			 * @param int $timeout Timeout in seconds.
+			 */
+			'timeout' => (int) apply_filters( 'bcsend_ai_request_timeout', 120 ),
 		);
 
 		$attempt    = 0;
@@ -166,7 +193,7 @@ class Bcsend_Anthropic_API {
 
 			$response = wp_remote_post( self::API_URL, $args );
 
-			// Connection-level error (timeout, DNS failure, etc.).
+			// Connection-level error.
 			if ( is_wp_error( $response ) ) {
 				$last_error = $response;
 
@@ -176,13 +203,24 @@ class Bcsend_Anthropic_API {
 					wp_json_encode(
 						array(
 							'service' => 'anthropic',
-							'model'   => $this->model,
+							'model'   => $model,
 							'attempt' => $attempt,
 							'error'   => $response->get_error_message(),
 						)
 					),
 					'error'
 				);
+
+				// A timeout is ambiguous: the request reached the provider and
+				// may still complete and be billed. Never retry it - surface
+				// the ambiguity instead. Pre-connection failures (DNS, refused
+				// connection) are safe to retry.
+				if ( Bcsend_AI_Service::is_ambiguous_transport_error( $response ) ) {
+					return new WP_Error(
+						'ai_timeout_ambiguous',
+						__( 'The AI request timed out. It may still be processing (and billed) at the provider, so it was not retried automatically.', 'beacon-campaign-sender' )
+					);
+				}
 
 				continue;
 			}
@@ -197,23 +235,54 @@ class Bcsend_Anthropic_API {
 				wp_json_encode(
 					array(
 						'service'     => 'anthropic',
-						'model'       => $this->model,
+						'model'       => $model,
 						'attempt'     => $attempt,
 						'status_code' => $code,
 					)
 				)
 			);
 
-			// Success.
+			// Success at the HTTP layer - but check stop_reason before content:
+			// Claude 5 safety classifiers decline with HTTP 200 and
+			// stop_reason "refusal" (content may be empty).
 			if ( 200 === $code ) {
-				if ( isset( $decoded_body['content'][0]['text'] ) ) {
-					return $decoded_body['content'][0]['text'];
+				$stop_reason = isset( $decoded_body['stop_reason'] ) ? $decoded_body['stop_reason'] : '';
+
+				if ( 'refusal' === $stop_reason ) {
+					return $this->handle_refusal( $messages, $system, $model, $is_fallback );
+				}
+
+				$text = $this->extract_text_content( $decoded_body );
+
+				if ( '' !== $text ) {
+					return $text;
+				}
+
+				if ( 'max_tokens' === $stop_reason ) {
+					return new WP_Error(
+						'anthropic_api_error',
+						'The response ran out of output tokens before any text was produced. Try again, or choose a different model.',
+						array( 'response' => $decoded_body )
+					);
 				}
 
 				return new WP_Error(
 					'anthropic_api_error',
 					'Unexpected response format from Anthropic API.',
 					array( 'response' => $decoded_body )
+				);
+			}
+
+			// Timeout-family responses are ambiguous: an intermediary may
+			// have stopped waiting after Anthropic accepted the generation.
+			// Never submit a duplicate automatically. The deliberate residual
+			// tradeoff is that 500/502/503/529 remain retryable below even
+			// though a late intermediary failure can rarely be ambiguous too.
+			if ( in_array( $code, array( 408, 504, 524 ), true ) ) {
+				return new WP_Error(
+					'ai_timeout_ambiguous',
+					__( 'The AI request timed out at a gateway. It may still be processing (and billed) at the provider, so it was not retried automatically.', 'beacon-campaign-sender' ),
+					array( 'status_code' => $code )
 				);
 			}
 
@@ -253,6 +322,86 @@ class Bcsend_Anthropic_API {
 		}
 
 		return $last_error;
+	}
+
+	/**
+	 * Handle a safety-classifier refusal, retrying once on the fallback model.
+	 *
+	 * The retry runs exactly once (never back to the refused model, never
+	 * chained), only for models the catalog marks fallback-eligible, and only
+	 * when the admin has left the fallback setting enabled. All other error
+	 * conditions (timeouts, rate limits, 5xx) never reach this path.
+	 *
+	 * @param array  $messages    Original request messages.
+	 * @param string $system      Original system prompt.
+	 * @param string $model       The model that refused.
+	 * @param bool   $is_fallback Whether this response was already a fallback attempt.
+	 * @return string|WP_Error
+	 */
+	private function handle_refusal( $messages, $system, $model, $is_fallback ) {
+		$fallback = $is_fallback ? '' : Bcsend_Model_Catalog::fallback_model( $model );
+
+		if ( '' !== $fallback ) {
+			$settings         = get_option( 'bcsend_settings', array() );
+			$fallback_enabled = ! isset( $settings['fable_fallback_enabled'] ) || ! empty( $settings['fable_fallback_enabled'] );
+
+			if ( $fallback_enabled ) {
+				Bcsend_Logger::log(
+					'generation',
+					'Model declined the request; retrying once on fallback model',
+					wp_json_encode(
+						array(
+							'service'        => 'anthropic',
+							'refused_model'  => $model,
+							'fallback_model' => $fallback,
+						)
+					),
+					'warning'
+				);
+
+				// The fallback is a second full provider call - restart the
+				// job lease clock so a legitimate long Fable + Opus sequence
+				// is never swept uncertain mid-flight.
+				do_action( 'bcsend_ai_lease_extend' );
+
+				return $this->request( $messages, $system, $fallback, true );
+			}
+		}
+
+		return new WP_Error(
+			'ai_refusal',
+			sprintf(
+				/* translators: %s: AI model ID. */
+				__( 'The AI model (%s) declined this request via its safety system. Rewording the prompt usually resolves this.', 'beacon-campaign-sender' ),
+				$model
+			)
+		);
+	}
+
+	/**
+	 * Extract the text content from a Messages API response.
+	 *
+	 * Claude 5 responses can begin with thinking blocks, so the first content
+	 * block is not necessarily text - concatenate every text block instead of
+	 * reading content[0] blindly.
+	 *
+	 * @param array $decoded_body Decoded API response.
+	 * @return string
+	 */
+	private function extract_text_content( $decoded_body ) {
+		if ( empty( $decoded_body['content'] ) || ! is_array( $decoded_body['content'] ) ) {
+			return '';
+		}
+
+		$text = '';
+
+		foreach ( $decoded_body['content'] as $block ) {
+			if ( isset( $block['type'] ) && 'text' === $block['type'] && isset( $block['text'] ) ) {
+				$text .= $block['text'];
+			}
+		}
+
+		return $text;
 	}
 
 	/**

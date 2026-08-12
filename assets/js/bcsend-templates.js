@@ -20,6 +20,69 @@
         init: function() {
             this.bindModal();
             this.bindActions();
+            this.scaleThumbnails();
+
+            var self = this;
+            var resizeTimer = null;
+            $(window).on('resize', function() {
+                window.clearTimeout(resizeTimer);
+                resizeTimer = window.setTimeout(function() {
+                    self.scaleThumbnails();
+                }, 150);
+            });
+        },
+
+        /* ============================================================
+           Full-email thumbnails
+           ============================================================ */
+
+        // Each card shows the ENTIRE email, scaled to the card width.
+        // The iframe renders at a fixed design width; we measure the email's
+        // real height and scale both down so the whole design is visible.
+        DESIGN_WIDTH: 680,
+
+        scaleThumbnails: function() {
+            var self = this;
+
+            $('.bcsend-template-thumb').each(function() {
+                var iframe = this;
+
+                var apply = function() {
+                    var $viewport = $(iframe).closest('.bcsend-template-thumb-viewport');
+                    if (!$viewport.length) {
+                        return;
+                    }
+
+                    var doc = null;
+                    try {
+                        doc = iframe.contentDocument;
+                    } catch (e) {
+                        doc = null;
+                    }
+                    if (!doc || !doc.documentElement) {
+                        return;
+                    }
+
+                    var scale = $viewport.width() / self.DESIGN_WIDTH;
+                    var contentHeight = Math.max(
+                        doc.documentElement.scrollHeight,
+                        doc.body ? doc.body.scrollHeight : 0,
+                        200
+                    );
+
+                    $(iframe).css({
+                        width: self.DESIGN_WIDTH + 'px',
+                        height: contentHeight + 'px',
+                        transform: 'scale(' + scale + ')'
+                    });
+                    $viewport.css('height', Math.ceil(contentHeight * scale) + 'px');
+                };
+
+                if (iframe.contentDocument && 'complete' === iframe.contentDocument.readyState) {
+                    apply();
+                }
+                $(iframe).off('load.bcsendThumb').on('load.bcsendThumb', apply);
+            });
         },
 
         /* ============================================================
@@ -34,9 +97,10 @@
 
             $(document).on('click', '.bcsend-preview-template-btn', function() {
                 var htmlContent = $(this).data('template-html') || '';
+                var name = $(this).data('template-name') || '';
 
                 if (htmlContent) {
-                    self.openModal(htmlContent);
+                    self.openModal(htmlContent, name);
                 } else {
                     Bcsend.notify('No HTML content to preview.', 'warning');
                 }
@@ -64,11 +128,12 @@
          *
          * @param {string} html HTML content for the iframe.
          */
-        openModal: function(html) {
+        openModal: function(html, name) {
             var $overlay = $('#bcsend-template-preview-modal');
             var $iframe = $('#bcsend-template-modal-iframe');
+            $('.bcsend-template-modal-title').text(name || 'Template preview');
             $iframe[0].srcdoc = html;
-            $overlay.show();
+            $overlay.css('display', 'flex');
         },
 
         /**
@@ -103,6 +168,25 @@
                         window.location.reload();
                     } else {
                         var errMsg = (response.data && response.data.message) ? response.data.message : 'Failed to duplicate template.';
+                        Bcsend.notify(errMsg, 'error');
+                    }
+                });
+            });
+
+            $(document).on('click', '.bcsend-set-default-template', function() {
+                var $btn = $(this);
+                var id = $btn.data('template-id');
+
+                Bcsend.loading($btn, true);
+
+                Bcsend.ajax('bcsend_set_default_template', { template_id: id }, function(response) {
+                    Bcsend.loading($btn, false);
+
+                    if (response.success) {
+                        Bcsend.notify('Default template updated.', 'success');
+                        window.location.reload();
+                    } else {
+                        var errMsg = (response.data && response.data.message) ? response.data.message : 'Could not set the default template.';
                         Bcsend.notify(errMsg, 'error');
                     }
                 });

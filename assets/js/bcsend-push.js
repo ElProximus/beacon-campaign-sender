@@ -116,6 +116,14 @@
                 return;
             }
             data.target_data = JSON.stringify(selectedUsers);
+        } else if (recipientType === 'topic') {
+            var topicName = $.trim($('#bcsend-push-topic').val());
+            if (!topicName) {
+                Bcsend.notify('Please enter the Firebase topic name.', 'error');
+                $('#bcsend-push-topic').focus();
+                return;
+            }
+            data.target_data = JSON.stringify({ topic: topicName });
         }
 
         Bcsend.loading($btn, true);
@@ -159,10 +167,69 @@
         });
 
         // ---- Composer: Recipient mode toggle ----
+        // ---- Push list: token import ----
+        $('#bcsend-import-tokens-btn').on('click', function() {
+            var $btn = $(this);
+            var tokens = $.trim($('#bcsend-import-tokens').val());
+            var $status = $('#bcsend-import-tokens-status');
+
+            if (!tokens) {
+                $status.text('Paste at least one token first.');
+                return;
+            }
+
+            Bcsend.loading($btn, true);
+            $status.text('Importing...');
+
+            Bcsend.ajax('bcsend_import_push_tokens', {
+                tokens: tokens,
+                platform: $('#bcsend-import-platform').val()
+            }, function(response) {
+                Bcsend.loading($btn, false);
+
+                if (response.success) {
+                    $status.text(response.data.message || 'Imported.');
+                    $('#bcsend-import-tokens').val('');
+                } else {
+                    $status.text((response.data && response.data.message) || 'Import failed.');
+                }
+            });
+        });
+
+        // ---- Push list: stale-device purge ----
+        $('#bcsend-purge-stale-btn').on('click', function() {
+            var $btn = $(this);
+            var $status = $('#bcsend-purge-stale-status');
+
+            if (!window.confirm('Remove all stale devices now? Dead tokens are deleted; real devices re-register automatically the next time they subscribe.')) {
+                return;
+            }
+
+            Bcsend.loading($btn, true);
+            $status.text('Removing...');
+
+            Bcsend.ajax('bcsend_purge_stale_devices', {}, function(response) {
+                Bcsend.loading($btn, false);
+
+                if (response.success) {
+                    $status.text(response.data.message || 'Removed.');
+                    $btn.prop('disabled', true);
+                    if (response.data.stats) {
+                        $('#bcsend-device-stats').text(
+                            'Registered devices: ' + response.data.stats.active + ' active, ' + response.data.stats.stale + ' stale.'
+                        );
+                    }
+                } else {
+                    $status.text((response.data && response.data.message) || 'Purge failed.');
+                }
+            });
+        });
+
         $('input[name="bcsend-push-recipients"]').on('change', function() {
             var mode = $(this).val();
             $('#bcsend-push-role-fields')[mode === 'by_role' ? 'slideDown' : 'slideUp'](200);
             $('#bcsend-push-user-fields')[mode === 'specific_users' ? 'slideDown' : 'slideUp'](200);
+            $('#bcsend-push-topic-fields')[mode === 'topic' ? 'slideDown' : 'slideUp'](200);
         });
 
         // ---- Composer: User search ----

@@ -428,11 +428,15 @@ class Bcsend_Push_Service {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param string $token   FCM device token.
-	 * @param string $title   Notification title.
-	 * @param string $message Notification body.
+	 * @param string $token          FCM device token.
+	 * @param string $title          Notification title.
+	 * @param string $message        Notification body.
+	 * @param int    $user_id        Optional owning user, for badge counts.
+	 * @param string $link_url       Optional click-through URL.
+	 * @param bool   $return_details Whether to return a detailed result array.
+	 * @param string $platform       Device platform; 'web' switches to a data-only payload.
 	 *
-	 * @return true|string|WP_Error True on success, 'invalid_token' for unregistered tokens, or WP_Error.
+	 * @return true|string|array|WP_Error True on success, 'invalid_token' for unregistered tokens, details array, or WP_Error.
 	 */
 	/**
 	 * Build the FCM v1 message payload matching BuddyBoss App format.
@@ -441,14 +445,40 @@ class Bcsend_Push_Service {
 	 * badge settings for iOS (APNs) and Android, plus a data payload
 	 * for deep-linking from the notification tap.
 	 *
-	 * @param string $token   FCM device token.
-	 * @param string $title   Notification title.
-	 * @param string $message Notification body.
-	 * @param int    $user_id Optional user ID for badge count.
+	 * @param string $token    FCM device token.
+	 * @param string $title    Notification title.
+	 * @param string $message  Notification body.
+	 * @param int    $user_id  Optional user ID for badge count.
+	 * @param string $link_url Optional click-through URL.
+	 * @param string $platform Device platform; 'web' yields a data-only payload.
 	 *
 	 * @return array FCM v1 message payload.
 	 */
-	private function build_message_payload( $token, $title, $message, $user_id = 0, $link_url = '' ) {
+	private function build_message_payload( $token, $title, $message, $user_id = 0, $link_url = '', $platform = 'app' ) {
+		// Web push is delivered DATA-ONLY: the service worker renders the
+		// notification itself, so including a notification block would make
+		// the browser display a duplicate.
+		if ( 'web' === $platform ) {
+			$payload = array(
+				'message' => array(
+					'token' => $token,
+					'data'  => array(
+						'notification_type' => 'bcsend_campaign',
+						'title'             => (string) $title,
+						'body'              => (string) $message,
+						'primary_text'      => (string) $title,
+					),
+				),
+			);
+
+			if ( ! empty( $link_url ) ) {
+				$payload['message']['data']['link_url']      = $link_url;
+				$payload['message']['data']['deep_link_url'] = $link_url;
+			}
+
+			return $payload;
+		}
+
 		$payload = array(
 			'message' => array(
 				'token'        => $token,
@@ -478,10 +508,25 @@ class Bcsend_Push_Service {
 			),
 		);
 
+		// Web push (browser) delivery: FCM applies the webpush block to
+		// browser tokens and ignores it for native apps, so one payload
+		// serves every platform. fcm_options.link makes clicking the
+		// notification open the URL.
+		$payload['message']['webpush'] = array(
+			'notification' => array(
+				'title' => $title,
+				'body'  => $message,
+			),
+		);
+
 		// Add deep link URL if provided.
 		if ( ! empty( $link_url ) ) {
 			$payload['message']['data']['link_url']      = $link_url;
 			$payload['message']['data']['deep_link_url'] = $link_url;
+
+			if ( 0 === strpos( $link_url, 'https://' ) ) {
+				$payload['message']['webpush']['fcm_options'] = array( 'link' => $link_url );
+			}
 		}
 
 		// Set badge count from BuddyBoss notification count if available.
@@ -495,7 +540,7 @@ class Bcsend_Push_Service {
 		return $payload;
 	}
 
-	public function send_single( $token, $title, $message, $user_id = 0, $link_url = '', $return_details = false ) {
+	public function send_single( $token, $title, $message, $user_id = 0, $link_url = '', $return_details = false, $platform = 'app' ) {
 		$access_token = $this->get_access_token();
 
 		if ( is_wp_error( $access_token ) ) {
@@ -507,7 +552,7 @@ class Bcsend_Push_Service {
 			rawurlencode( $this->project_id )
 		);
 
-		$body = $this->build_message_payload( $token, $title, $message, $user_id, $link_url );
+		$body = $this->build_message_payload( $token, $title, $message, $user_id, $link_url, $platform );
 
 		$args = array(
 			'method'  => 'POST',
@@ -581,15 +626,20 @@ class Bcsend_Push_Service {
 				return 'invalid_token';
 			}
 
-			// Check for UNREGISTERED or INVALID_ARGUMENT in the error details.
+			// Only prune tokens FCM says are genuinely gone. INVALID_ARGUMENT
+			// is a generic payload-level error (bad title, malformed data,
+			// oversized message) and must never be treated as a dead token -
+			// doing so deletes working devices for an unrelated bug.
 			if ( isset( $decoded_body['error']['details'] ) && is_array( $decoded_body['error']['details'] ) ) {
 				foreach ( $decoded_body['error']['details'] as $detail ) {
-					if ( isset( $detail['errorCode'] ) && in_array( $detail['errorCode'], array( 'UNREGISTERED', 'INVALID_ARGUMENT' ), true ) ) {
+					$error_code = isset( $detail['errorCode'] ) ? $detail['errorCode'] : '';
+
+					if ( in_array( $error_code, array( 'UNREGISTERED', 'NOT_FOUND', 'INVALID_REGISTRATION', 'MISMATCH_SENDER_ID' ), true ) ) {
 						if ( $return_details ) {
 							return array(
 								'status'        => 'invalid_token',
 								'fcm_response'  => $raw_body,
-								'error_message' => $detail['errorCode'],
+								'error_message' => $error_code,
 							);
 						}
 						return 'invalid_token';
@@ -597,16 +647,33 @@ class Bcsend_Push_Service {
 				}
 			}
 
-			// Also check the status field for token-related errors.
+			// A payload-level INVALID_ARGUMENT is a send failure, not a dead
+			// device: report it without touching the token.
 			if ( 400 === $code && isset( $decoded_body['error']['status'] ) && 'INVALID_ARGUMENT' === $decoded_body['error']['status'] ) {
+				$argument_error = isset( $decoded_body['error']['message'] ) ? $decoded_body['error']['message'] : 'INVALID_ARGUMENT';
+
+				Bcsend_Logger::log(
+					'api_call',
+					'FCM rejected the message payload (token kept)',
+					wp_json_encode(
+						array(
+							'service' => 'fcm',
+							'action'  => 'send_single',
+							'error'   => $argument_error,
+						)
+					),
+					'error'
+				);
+
 				if ( $return_details ) {
 					return array(
-						'status'        => 'invalid_token',
+						'status'        => 'failed',
 						'fcm_response'  => $raw_body,
-						'error_message' => 'INVALID_ARGUMENT',
+						'error_message' => $argument_error,
 					);
 				}
-				return 'invalid_token';
+
+				return new WP_Error( 'push_invalid_payload', $argument_error );
 			}
 
 			// Auth failures - do not retry.
@@ -800,6 +867,102 @@ class Bcsend_Push_Service {
 	 *
 	 * @return array Array of objects with user_id and token properties.
 	 */
+	/**
+	 * Send one notification to a Firebase topic.
+	 *
+	 * Topic sends reach every device the site owner's app has subscribed to
+	 * that topic - no token knowledge required, which is how existing mobile
+	 * apps can use Beacon without importing anything.
+	 *
+	 * @param string $topic    Topic name (without the /topics/ prefix).
+	 * @param string $title    Notification title.
+	 * @param string $message  Notification body.
+	 * @param string $link_url Optional click-through URL.
+	 * @return true|WP_Error
+	 */
+	public function send_to_topic( $topic, $title, $message, $link_url = '' ) {
+		$topic = trim( (string) $topic );
+
+		if ( ! preg_match( '/^[A-Za-z0-9\-_.~%]{1,250}$/', $topic ) ) {
+			return new WP_Error( 'invalid_topic', __( 'Enter a valid Firebase topic name (letters, numbers, dashes, underscores).', 'beacon-campaign-sender' ) );
+		}
+
+		$access_token = $this->get_access_token();
+
+		if ( is_wp_error( $access_token ) ) {
+			return $access_token;
+		}
+
+		$payload = $this->build_message_payload( '__topic__', $title, $message, 0, $link_url );
+		unset( $payload['message']['token'] );
+		$payload['message']['topic'] = $topic;
+
+		$response = wp_remote_post(
+			sprintf( 'https://fcm.googleapis.com/v1/projects/%s/messages:send', rawurlencode( $this->project_id ) ),
+			array(
+				'method'  => 'POST',
+				'headers' => array(
+					'Authorization' => 'Bearer ' . $access_token,
+					'Content-Type'  => 'application/json',
+				),
+				'body'    => wp_json_encode( $payload ),
+				'timeout' => 30,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+
+		if ( 200 === $code ) {
+			Bcsend_Logger::log( 'push', sprintf( 'Topic push sent to "%s".', $topic ) );
+			return true;
+		}
+
+		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
+		$detail  = isset( $decoded['error']['message'] ) ? $decoded['error']['message'] : sprintf( 'FCM returned HTTP %d', $code );
+
+		return new WP_Error( 'topic_send_failed', $detail );
+	}
+
+	/**
+	 * Send a test notification to every device registered to one user.
+	 *
+	 * Backs the Test Push button in manual (non-BuddyBoss) mode.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $title   Notification title.
+	 * @param string $message Notification body.
+	 * @return array|WP_Error {sent, failed, total} or WP_Error.
+	 */
+	public function send_test_to_user( $user_id, $title, $message ) {
+		$rows = array_merge(
+			Bcsend_Devices::tokens_for_users( array( $user_id ) ),
+			(array) $this->get_tokens_for_users( array( $user_id ) )
+		);
+
+		if ( empty( $rows ) ) {
+			return new WP_Error(
+				'no_devices',
+				__( 'No registered devices found for your user. Subscribe to push notifications first (web push widget or your app), then try again.', 'beacon-campaign-sender' )
+			);
+		}
+
+		$summary = $this->send_batch( $rows, $title, $message );
+
+		if ( is_wp_error( $summary ) ) {
+			return $summary;
+		}
+
+		return array(
+			'sent'   => (int) $summary['sent'],
+			'failed' => (int) $summary['failed'],
+			'total'  => (int) $summary['total'],
+		);
+	}
+
 	public function get_tokens_for_users( $user_ids ) {
 		global $wpdb;
 
@@ -837,7 +1000,7 @@ class Bcsend_Push_Service {
 	 * @return array|WP_Error Per-batch summary or WP_Error on auth failure.
 	 */
 	public function send_batch( $tokens, $title, $message ) {
-		$tokens = $this->normalize_tokens( $tokens );
+		$tokens = $this->normalize_token_rows( $tokens );
 
 		if ( empty( $tokens ) ) {
 			return array(
@@ -854,8 +1017,9 @@ class Bcsend_Push_Service {
 		$failed         = 0;
 		$invalid_tokens = array();
 
-		foreach ( $tokens as $token ) {
-			$result = $this->send_single( $token, $title, $message );
+		foreach ( $tokens as $row ) {
+			$token  = $row['token'];
+			$result = $this->send_single( $token, $title, $message, 0, '', false, $row['platform'] );
 
 			if ( true === $result ) {
 				++$sent;
@@ -923,6 +1087,50 @@ class Bcsend_Push_Service {
 	 * @param array $tokens Raw tokens or token rows.
 	 * @return array
 	 */
+	/**
+	 * Normalize token input into {token, platform} rows.
+	 *
+	 * Platform drives payload shape: web push must be data-only so the
+	 * browser does not auto-display a second copy of the notification the
+	 * service worker renders.
+	 *
+	 * @param array $tokens Token rows, arrays, or plain strings.
+	 * @return array
+	 */
+	private function normalize_token_rows( $tokens ) {
+		$rows = array();
+		$seen = array();
+
+		foreach ( (array) $tokens as $entry ) {
+			$token    = '';
+			$platform = 'app';
+
+			if ( is_object( $entry ) ) {
+				$token    = isset( $entry->device_token ) ? $entry->device_token : ( isset( $entry->token ) ? $entry->token : '' );
+				$platform = isset( $entry->platform ) ? (string) $entry->platform : 'app';
+			} elseif ( is_array( $entry ) ) {
+				$token    = isset( $entry['device_token'] ) ? $entry['device_token'] : ( isset( $entry['token'] ) ? $entry['token'] : '' );
+				$platform = isset( $entry['platform'] ) ? (string) $entry['platform'] : 'app';
+			} elseif ( is_string( $entry ) ) {
+				$token = $entry;
+			}
+
+			$token = is_string( $token ) ? trim( $token ) : '';
+
+			if ( '' === $token || isset( $seen[ $token ] ) ) {
+				continue;
+			}
+
+			$seen[ $token ] = true;
+			$rows[]         = array(
+				'token'    => $token,
+				'platform' => '' !== $platform ? $platform : 'app',
+			);
+		}
+
+		return $rows;
+	}
+
 	private function normalize_tokens( $tokens ) {
 		$normalized = array();
 
@@ -961,6 +1169,12 @@ class Bcsend_Push_Service {
 
 		if ( empty( $invalid_tokens ) ) {
 			return 0;
+		}
+
+		// Beacon's own registry: mark stale rather than delete, so the admin
+		// can see churn in the device counts.
+		foreach ( $invalid_tokens as $invalid_token ) {
+			Bcsend_Devices::mark_stale( $invalid_token );
 		}
 
 		$table        = $wpdb->prefix . 'bbapp_user_devices';

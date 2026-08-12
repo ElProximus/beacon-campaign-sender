@@ -24,7 +24,6 @@ $settings_tabs                       = array(
 	'push'             => __( 'Push', 'beacon-campaign-sender' ),
 	'social'           => __( 'Social', 'beacon-campaign-sender' ),
 	'brand-voice'      => __( 'Brand Voice', 'beacon-campaign-sender' ),
-	'base-template'    => __( 'Base Template', 'beacon-campaign-sender' ),
 	'ai'               => __( 'AI', 'beacon-campaign-sender' ),
 	'abilities-bridge' => __( 'Abilities', 'beacon-campaign-sender' ),
 	'access'           => __( 'Access', 'beacon-campaign-sender' ),
@@ -436,6 +435,83 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 						<span class="bcsend-test-result" id="bcsend-firebase-test-result"></span>
 					</td>
 				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Web Push (browsers)', 'beacon-campaign-sender' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox"
+									name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[webpush_enabled]"
+									value="1"
+									<?php checked( ! empty( $settings['webpush_enabled'] ), true ); ?> />
+							<?php esc_html_e( 'Let visitors subscribe to push notifications in their browser — no mobile app required', 'beacon-campaign-sender' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'Place the subscribe button anywhere with the [bcsend_push_subscribe] shortcode. Subscribers receive pushes on desktop and Android; iPhones require the site to be added to the Home Screen (an Apple limitation).', 'beacon-campaign-sender' ); ?></p>
+						<?php if ( class_exists( 'Bcsend_Devices' ) ) : ?>
+							<?php $bcsend_device_counts = Bcsend_Devices::counts(); ?>
+							<p class="description">
+								<?php
+								printf(
+									/* translators: 1: active devices, 2: web devices, 3: app devices. */
+									esc_html__( 'Registered devices: %1$d active (%2$d web, %3$d app).', 'beacon-campaign-sender' ),
+									(int) $bcsend_device_counts['active'],
+									(int) $bcsend_device_counts['web'],
+									(int) $bcsend_device_counts['app']
+								);
+								?>
+							</p>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="bcsend-firebase-web-config"><?php esc_html_e( 'Firebase Web App Config', 'beacon-campaign-sender' ); ?></label>
+					</th>
+					<td>
+						<textarea id="bcsend-firebase-web-config"
+								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[firebase_web_config]"
+								rows="7"
+								class="large-text code"
+								placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","messagingSenderId":"...","appId":"..."}'><?php echo esc_textarea( isset( $settings['firebase_web_config'] ) ? $settings['firebase_web_config'] : '' ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'Firebase Console > Project settings > General > Your apps > Web app > "Config" — paste the JSON object here. (Different from the service account above: this one is public and identifies your app to browsers.)', 'beacon-campaign-sender' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="bcsend-firebase-vapid-key"><?php esc_html_e( 'Web Push Certificate Key (VAPID)', 'beacon-campaign-sender' ); ?></label>
+					</th>
+					<td>
+						<input type="text"
+								id="bcsend-firebase-vapid-key"
+								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[firebase_vapid_key]"
+								value="<?php echo esc_attr( isset( $settings['firebase_vapid_key'] ) ? $settings['firebase_vapid_key'] : '' ); ?>"
+								class="large-text" />
+						<p class="description"><?php esc_html_e( 'Firebase Console > Project settings > Cloud Messaging > Web configuration > Web Push certificates > "Key pair".', 'beacon-campaign-sender' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'App Registration Key', 'beacon-campaign-sender' ); ?></th>
+					<td>
+						<?php if ( class_exists( 'Bcsend_Devices' ) ) : ?>
+							<code style="user-select: all;"><?php echo esc_html( Bcsend_Devices::get_app_key() ); ?></code>
+							<p class="description">
+								<?php esc_html_e( 'Custom mobile apps can register device tokens by POSTing {"token":"…","platform":"android"} to the URL below with this key in an X-Bcsend-App-Key header. Browser subscribers do not need it.', 'beacon-campaign-sender' ); ?><br />
+								<code><?php echo esc_url( rest_url( 'bcsend/v1/devices' ) ); ?></code>
+							</p>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Floating Bell', 'beacon-campaign-sender' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox"
+									name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[webpush_bell]"
+									value="1"
+									<?php checked( ! empty( $settings['webpush_bell'] ), true ); ?> />
+							<?php esc_html_e( 'Show a floating bell button on the site so visitors can subscribe from any page', 'beacon-campaign-sender' ); ?>
+						</label>
+					</td>
+				</tr>
 			</table>
 		</div>
 
@@ -549,9 +625,13 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 											<th><?php esc_html_e( 'Platform', 'beacon-campaign-sender' ); ?></th>
 											<th><?php esc_html_e( 'Username', 'beacon-campaign-sender' ); ?></th>
 											<th><?php esc_html_e( 'Account ID', 'beacon-campaign-sender' ); ?></th>
+											<th><?php esc_html_e( 'Default', 'beacon-campaign-sender' ); ?></th>
 										</tr>
 									</thead>
 									<tbody>
+										<?php
+										$bcsend_default_accounts = isset( $settings['social_default_accounts'] ) && is_array( $settings['social_default_accounts'] ) ? array_map( 'strval', $settings['social_default_accounts'] ) : array();
+										?>
 										<?php foreach ( $zernio_accounts as $account ) : ?>
 											<?php
 											$account_id = '';
@@ -571,14 +651,38 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 												<td><?php echo esc_html( isset( $account['platform'] ) ? $account['platform'] : '' ); ?></td>
 												<td><?php echo esc_html( isset( $account['username'] ) ? $account['username'] : ( isset( $account['handle'] ) ? $account['handle'] : ( isset( $account['displayName'] ) ? $account['displayName'] : '' ) ) ); ?></td>
 												<td><code><?php echo esc_html( $account_id ); ?></code></td>
+												<td>
+													<label>
+														<input type="checkbox"
+																name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[social_default_accounts][]"
+																data-platform="<?php echo esc_attr( isset( $account['platform'] ) ? $account['platform'] : '' ); ?>"
+																value="<?php echo esc_attr( $account_id ); ?>"
+																<?php checked( in_array( $account_id, $bcsend_default_accounts, true ) ); ?> />
+														<?php esc_html_e( 'Pre-select in composer', 'beacon-campaign-sender' ); ?>
+													</label>
+												</td>
 											</tr>
 										<?php endforeach; ?>
 									</tbody>
 								</table>
+								<p class="description"><?php esc_html_e( 'Default accounts are pre-selected automatically when you create a new campaign.', 'beacon-campaign-sender' ); ?></p>
 							<?php else : ?>
 								<p class="description"><?php esc_html_e( 'No synced accounts yet.', 'beacon-campaign-sender' ); ?></p>
 							<?php endif; ?>
 						</div>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Composer Defaults', 'beacon-campaign-sender' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox"
+									name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[social_default_enabled]"
+									value="1"
+									<?php checked( ! empty( $settings['social_default_enabled'] ), true ); ?> />
+							<?php esc_html_e( 'Check "Include Social Posts" automatically on new campaigns', 'beacon-campaign-sender' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'New campaigns will start with social posting on and your default accounts (marked above) already selected, so generated campaigns include social copy without extra clicks.', 'beacon-campaign-sender' ); ?></p>
 					</td>
 				</tr>
 				<tr>
@@ -689,42 +793,10 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 									rows="12"
 									class="large-text"
 									placeholder="<?php esc_attr_e( 'Describe your brand tone, personality, writing style, and any specific language or phrases to use or avoid. This will be used by AI when generating campaign content.', 'beacon-campaign-sender' ); ?>"><?php echo esc_textarea( $settings['brand_voice'] ); ?></textarea>
-						<p class="description"><?php esc_html_e( 'This description is included in every AI content generation request to maintain consistent brand messaging.', 'beacon-campaign-sender' ); ?></p>
+						<p class="description"><?php esc_html_e( 'This description is included in every AI content generation request to maintain consistent brand messaging. It can also carry standing instructions the AI should follow even when a campaign prompt is short or empty — e.g. "always include a free-shipping banner" or "close every email with our tagline". Email design does not belong here: the visual starting point is your default template on the Templates screen.', 'beacon-campaign-sender' ); ?></p>
 					</td>
 				</tr>
 			</table>
-		</div>
-
-		<!-- Base Template Tab -->
-		<div class="bcsend-tab-content" <?php echo ( 'base-template' !== $active_tab ) ? 'style="display:none;"' : 'style="display:block;"'; ?> id="bcsend-tab-base-template">
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row">
-						<label for="bcsend-base-template"><?php esc_html_e( 'Base HTML Template', 'beacon-campaign-sender' ); ?></label>
-					</th>
-					<td>
-						<textarea id="bcsend-base-template"
-									name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[base_template]"
-									rows="20"
-									class="large-text code"><?php echo esc_textarea( $settings['base_template'] ); ?></textarea>
-						<p class="description"><?php esc_html_e( 'The HTML shell used as the foundation for all generated email campaigns.', 'beacon-campaign-sender' ); ?></p>
-						<p class="bcsend-template-actions">
-							<button type="button" class="button" id="bcsend-preview-template">
-								<?php esc_html_e( 'Preview', 'beacon-campaign-sender' ); ?>
-							</button>
-							<button type="button" class="button" id="bcsend-reset-template">
-								<?php esc_html_e( 'Reset to Default', 'beacon-campaign-sender' ); ?>
-							</button>
-						</p>
-					</td>
-				</tr>
-			</table>
-			<div id="bcsend-template-preview-overlay" class="bcsend-modal-overlay" style="display:none;">
-				<div class="bcsend-modal-content">
-					<button type="button" class="bcsend-modal-close" id="bcsend-close-template-preview">&times;</button>
-					<iframe id="bcsend-template-preview-frame" class="bcsend-preview-iframe"></iframe>
-				</div>
-			</div>
 		</div>
 
 		<!-- AI Tab -->
@@ -786,22 +858,30 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 					<td>
 						<select id="bcsend-anthropic-model"
 								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[anthropic_model]">
-							<option value="claude-opus-4-8" <?php selected( $settings['anthropic_model'], 'claude-opus-4-8' ); ?>>
-								<?php esc_html_e( 'Claude Opus 4.8 (Most capable)', 'beacon-campaign-sender' ); ?>
-							</option>
-							<option value="claude-opus-4-7" <?php selected( $settings['anthropic_model'], 'claude-opus-4-7' ); ?>>
-								<?php esc_html_e( 'Claude Opus 4.7', 'beacon-campaign-sender' ); ?>
-							</option>
-							<option value="claude-sonnet-4-6" <?php selected( $settings['anthropic_model'], 'claude-sonnet-4-6' ); ?>>
-								<?php esc_html_e( 'Claude Sonnet 4.6 (Recommended)', 'beacon-campaign-sender' ); ?>
-							</option>
-							<option value="claude-haiku-4-5-20251001" <?php selected( $settings['anthropic_model'], 'claude-haiku-4-5-20251001' ); ?>>
-								<?php esc_html_e( 'Claude Haiku 4.5 (Faster, lower cost)', 'beacon-campaign-sender' ); ?>
-							</option>
-							<option value="claude-opus-4-6" <?php selected( $settings['anthropic_model'], 'claude-opus-4-6' ); ?>>
-								<?php esc_html_e( 'Claude Opus 4.6 (Legacy)', 'beacon-campaign-sender' ); ?>
-							</option>
+							<?php foreach ( Bcsend_Model_Catalog::grouped_options( 'anthropic' ) as $model_group => $model_options ) : ?>
+								<optgroup label="<?php echo esc_attr( Bcsend_Model_Catalog::group_label( $model_group ) ); ?>">
+									<?php foreach ( $model_options as $model_id => $model_label ) : ?>
+										<option value="<?php echo esc_attr( $model_id ); ?>" <?php selected( $settings['anthropic_model'], $model_id ); ?>>
+											<?php echo esc_html( $model_label ); ?>
+										</option>
+									<?php endforeach; ?>
+								</optgroup>
+							<?php endforeach; ?>
 						</select>
+						<p class="description"><?php esc_html_e( 'Claude Fable 5 is Anthropic\'s most capable model at roughly double the price of Opus 5, with longer generation times. Choose it only for unusually complex campaign work.', 'beacon-campaign-sender' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Fable Fallback', 'beacon-campaign-sender' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox"
+									name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[fable_fallback_enabled]"
+									value="1"
+									<?php checked( ! empty( $settings['fable_fallback_enabled'] ), true ); ?> />
+							<?php esc_html_e( 'If Claude Fable 5 declines a request, automatically retry it once with Claude Opus 5', 'beacon-campaign-sender' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'Fable 5 has stricter safety systems that can occasionally decline ordinary marketing content. With this enabled (recommended), such requests are completed by Opus 5 instead, and the result is labeled with the model that produced it. Only refusals trigger the fallback — never errors or timeouts.', 'beacon-campaign-sender' ); ?></p>
 					</td>
 				</tr>
 				<tr>
@@ -843,19 +923,17 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 					<td>
 						<select id="bcsend-openai-model"
 								name="<?php echo esc_attr( Bcsend_Settings::OPTION_NAME ); ?>[openai_model]">
-							<option value="gpt-5.5" <?php selected( $settings['openai_model'], 'gpt-5.5' ); ?>>
-								<?php esc_html_e( 'GPT-5.5 (Most capable)', 'beacon-campaign-sender' ); ?>
-							</option>
-							<option value="gpt-5.4" <?php selected( $settings['openai_model'], 'gpt-5.4' ); ?>>
-								<?php esc_html_e( 'GPT-5.4 (Recommended)', 'beacon-campaign-sender' ); ?>
-							</option>
-							<option value="gpt-5.2" <?php selected( $settings['openai_model'], 'gpt-5.2' ); ?>>
-								<?php esc_html_e( 'GPT-5.2', 'beacon-campaign-sender' ); ?>
-							</option>
-							<option value="gpt-5-mini" <?php selected( $settings['openai_model'], 'gpt-5-mini' ); ?>>
-								<?php esc_html_e( 'GPT-5 mini', 'beacon-campaign-sender' ); ?>
-							</option>
+							<?php foreach ( Bcsend_Model_Catalog::grouped_options( 'openai' ) as $model_group => $model_options ) : ?>
+								<optgroup label="<?php echo esc_attr( Bcsend_Model_Catalog::group_label( $model_group ) ); ?>">
+									<?php foreach ( $model_options as $model_id => $model_label ) : ?>
+										<option value="<?php echo esc_attr( $model_id ); ?>" <?php selected( $settings['openai_model'], $model_id ); ?>>
+											<?php echo esc_html( $model_label ); ?>
+										</option>
+									<?php endforeach; ?>
+								</optgroup>
+							<?php endforeach; ?>
 						</select>
+						<p class="description"><?php esc_html_e( 'GPT-5.6 models run generation on OpenAI\'s servers in the background, which is more reliable on shared hosting.', 'beacon-campaign-sender' ); ?></p>
 					</td>
 				</tr>
 			</table>

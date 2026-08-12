@@ -1890,3 +1890,166 @@ body.bcsend-focus-mode .bcsend-card-recent-campaigns table {
         text-align: center;
     }
 }
+
+/* ============================================================
+   Templates Screen (card grid with full scaled email previews)
+   ============================================================ */
+
+.bcsend-templates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    align-items: start;
+    margin-top: 16px;
+}
+
+.bcsend-template-card {
+    position: relative;
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.bcsend-template-card:hover {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+}
+
+.bcsend-template-card.is-default {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+}
+
+.bcsend-default-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 3;
+    background: #2271b1;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 3px 10px;
+    border-radius: 999px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+/* Clickable preview area: the ENTIRE email, scaled to card width. */
+.bcsend-template-preview {
+    display: block;
+    position: relative;
+    text-decoration: none;
+    background: #f6f7f7;
+    border-bottom: 1px solid #dcdcde;
+}
+
+.bcsend-template-thumb-viewport {
+    overflow: hidden;
+    max-height: 720px; /* very long emails crop gracefully past this */
+    position: relative;
+}
+
+.bcsend-template-thumb {
+    display: block;
+    border: 0;
+    transform-origin: top left;
+    pointer-events: none; /* clicks pass to the card link */
+    background: #fff;
+}
+
+.bcsend-template-text-preview {
+    padding: 20px;
+    color: #50575e;
+    font-size: 13px;
+    min-height: 120px;
+}
+
+.bcsend-template-open-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(34, 113, 177, 0.85);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.bcsend-template-preview:hover .bcsend-template-open-hint,
+.bcsend-template-preview:focus .bcsend-template-open-hint {
+    opacity: 1;
+}
+
+.bcsend-template-info {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 14px 4px;
+}
+
+.bcsend-template-name {
+    margin: 0;
+    font-size: 14px;
+}
+
+.bcsend-template-date {
+    color: #787c82;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.bcsend-template-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 14px 14px;
+}
+
+.bcsend-template-action-status {
+    display: block;
+    padding: 0 14px 10px;
+    font-size: 12px;
+    color: #50575e;
+}
+
+/* Template preview modal: a real, centered, scrollable email preview. */
+.bcsend-template-modal {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+    width: min(760px, 94vw);
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.bcsend-template-modal-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid #dcdcde;
+    flex: 0 0 auto;
+}
+
+.bcsend-template-modal-title {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.bcsend-template-modal .bcsend-modal-iframe {
+    flex: 1 1 auto;
+    width: 100%;
+    border: 0;
+    background: #fff;
+}

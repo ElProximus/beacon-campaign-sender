@@ -52,6 +52,189 @@ class Bcsend_AI_Service {
 	}
 
 	/**
+	 * The task type of the generation currently in flight.
+	 *
+	 * Set by the entry-point functions so the provider clients can pick the
+	 * right output budget and effort from the model catalog.
+	 *
+	 * @var string
+	 */
+	private static $task_context = 'campaign';
+
+	/**
+	 * Metadata recorded by the provider client for the last generation.
+	 *
+	 * @var array
+	 */
+	private static $last_meta = array();
+
+	/**
+	 * Set the current task context and reset generation metadata.
+	 *
+	 * @param string $task Task type (campaign|html|push|social).
+	 * @return void
+	 */
+	public static function set_task_context( $task ) {
+		self::$task_context = in_array( $task, array( 'campaign', 'html', 'push', 'social' ), true ) ? $task : 'campaign';
+		self::$last_meta    = array();
+	}
+
+	/**
+	 * Get the current task context.
+	 *
+	 * @return string
+	 */
+	public static function get_task_context() {
+		return self::$task_context;
+	}
+
+	/**
+	 * Record metadata about the generation that just ran (called by clients).
+	 *
+	 * @param array $meta Partial metadata; merged over what is recorded.
+	 * @return void
+	 */
+	public static function record_generation_meta( $meta ) {
+		self::$last_meta = array_merge( self::$last_meta, (array) $meta );
+	}
+
+	/**
+	 * Clear the generation metadata.
+	 *
+	 * The job runner calls this at the start of every run so a job can never
+	 * observe a previous job's leftovers from this process-global static -
+	 * without it, one refactor of the execute paths away from resetting via
+	 * set_task_context() would let a failed job inherit the prior job's
+	 * provider_response_id and recovery could deliver another job's content.
+	 *
+	 * @return void
+	 */
+	public static function reset_generation_meta() {
+		self::$last_meta = array();
+	}
+
+	/**
+	 * Metadata for the most recent generation.
+	 *
+	 * @return array Possibly containing effective_model, fallback_used,
+	 *               provider_response_id.
+	 */
+	public static function get_last_generation_meta() {
+		return self::$last_meta;
+	}
+
+	/**
+	 * Shape a recovered provider text response into a job result payload.
+	 *
+	 * Mirrors what the job runner returns per job type, so a result recovered
+	 * after a worker loss is applied by the composer exactly like a normal one.
+	 *
+	 * @param string $job_type Job type (campaign|html|push|social).
+	 * @param string $text     Raw provider text (usually JSON).
+	 * @return array Empty array when the payload cannot be interpreted.
+	 */
+	public static function shape_recovered_result( $job_type, $text ) {
+		$text = trim( (string) $text );
+
+		if ( '' === $text ) {
+			return array();
+		}
+
+		// Providers may wrap JSON in a markdown code fence.
+		$json = $text;
+		if ( preg_match( '/```(?:json)?\s*([\s\S]*?)\s*```/', $json, $matches ) ) {
+			$json = trim( $matches[1] );
+		}
+
+		$parsed = json_decode( $json, true );
+		$parsed = ( is_array( $parsed ) && JSON_ERROR_NONE === json_last_error() ) ? $parsed : null;
+
+		switch ( $job_type ) {
+			case 'campaign':
+				if ( null === $parsed ) {
+					return array();
+				}
+
+				return array(
+					'content'  => wp_json_encode( $parsed ),
+					'provider' => 'openai',
+				);
+
+			case 'html':
+				$html = ( $parsed && ! empty( $parsed['html_content'] ) ) ? $parsed['html_content'] : $text;
+
+				return ( '' !== trim( (string) $html ) )
+					? array(
+						'html_content' => $html,
+						'provider'     => 'openai',
+					)
+					: array();
+
+			case 'push':
+				if ( null === $parsed || empty( $parsed['push_title'] ) ) {
+					return array();
+				}
+
+				return array(
+					'push_title'   => $parsed['push_title'],
+					'push_message' => isset( $parsed['push_message'] ) ? $parsed['push_message'] : '',
+					'provider'     => 'openai',
+				);
+
+			case 'social':
+				if ( null === $parsed ) {
+					return array();
+				}
+
+				$social = isset( $parsed['social'] ) && is_array( $parsed['social'] ) ? $parsed['social'] : $parsed;
+
+				return ! empty( $social )
+					? array(
+						'social'   => self::normalize_generated_social_entries( $social ),
+						'provider' => 'openai',
+					)
+					: array();
+		}
+
+		return array();
+	}
+
+	/**
+	 * Whether a transport-level WP_Error is ambiguous about provider-side state.
+	 *
+	 * A timed-out request reached (or may have reached) the provider and can
+	 * still complete and be billed there - retrying it risks a duplicate
+	 * charge. Pre-connection failures (DNS resolution, refused connections)
+	 * definitively never reached the provider and are safe to retry.
+	 *
+	 * @param WP_Error $error Transport error from wp_remote_post().
+	 * @return bool True when the request may have reached the provider.
+	 */
+	public static function is_ambiguous_transport_error( $error ) {
+		$message = strtolower( $error->get_error_message() );
+
+		// Definitively-safe failures: the connection was never established.
+		$safe_markers = array(
+			'curl error 6',  // Could not resolve host.
+			'curl error 7',  // Failed to connect.
+			'curl error 35', // SSL connect error.
+			'could not resolve',
+			'failed to connect',
+			'connection refused',
+		);
+
+		foreach ( $safe_markers as $marker ) {
+			if ( false !== strpos( $message, $marker ) ) {
+				return false;
+			}
+		}
+
+		// Everything else - timeouts above all ('curl error 28', 'timed out'),
+		// but also mid-transfer aborts - is treated as ambiguous.
+		return true;
+	}
+
+	/**
 	 * Get the configured provider label.
 	 *
 	 * @param array|null $settings Optional decrypted settings.
@@ -144,7 +327,7 @@ class Bcsend_AI_Service {
 				null,
 				$prompt,
 				isset( $settings['brand_voice'] ) ? $settings['brand_voice'] : '',
-				isset( $settings['base_template'] ) ? $settings['base_template'] : '',
+				self::get_default_template_html(),
 				array( 'email', 'push' ),
 				array()
 			);
@@ -173,6 +356,7 @@ class Bcsend_AI_Service {
 	 * @return array|WP_Error
 	 */
 	public static function generate_campaign_from_request( $product_ids, $prompt, $template_id = 0, $current_html = '', $image_urls = array(), $post_ids = array(), $channels = array( 'email', 'push' ), $social_platforms = array(), $social_post_mode = '' ) {
+		self::set_task_context( 'campaign' );
 		// Build structured content blocks for all selected items.
 		$content_blocks = array();
 
@@ -290,7 +474,7 @@ class Bcsend_AI_Service {
 
 		$settings      = $context['settings'];
 		$brand_voice   = isset( $settings['brand_voice'] ) ? $settings['brand_voice'] : '';
-		$base_template = null !== $base_template_html ? $base_template_html : ( isset( $settings['base_template'] ) ? $settings['base_template'] : '' );
+		$base_template = null !== $base_template_html && '' !== $base_template_html ? $base_template_html : self::get_default_template_html();
 		$generated     = $context['client']->generate_campaign( $product_data, $prompt, $brand_voice, $base_template, $channels, $social_platforms, self::resolve_social_post_mode( $social_post_mode, $settings ) );
 
 		if ( is_wp_error( $generated ) ) {
@@ -315,6 +499,7 @@ class Bcsend_AI_Service {
 	 * @return array|WP_Error
 	 */
 	public static function regenerate_html_from_request( $campaign_id = 0, $plain_text = '' ) {
+		self::set_task_context( 'html' );
 		if ( $campaign_id ) {
 			$campaign = self::get_draft_campaign( $campaign_id );
 
@@ -341,7 +526,7 @@ class Bcsend_AI_Service {
 		$generated = $context['client']->regenerate_html(
 			$plain_text,
 			isset( $settings['brand_voice'] ) ? $settings['brand_voice'] : '',
-			isset( $settings['base_template'] ) ? $settings['base_template'] : ''
+			self::get_default_template_html()
 		);
 
 		if ( is_wp_error( $generated ) ) {
@@ -363,6 +548,7 @@ class Bcsend_AI_Service {
 	 * @return array|WP_Error
 	 */
 	public static function regenerate_push_from_request( $campaign_id = 0, $context_text = '', $prompt = '' ) {
+		self::set_task_context( 'push' );
 		if ( $campaign_id ) {
 			$campaign = self::get_draft_campaign( $campaign_id );
 
@@ -413,6 +599,7 @@ class Bcsend_AI_Service {
 	 * @return array|WP_Error
 	 */
 	public static function regenerate_social_from_request( $campaign_id = 0, $context_text = '', $platforms = array(), $prompt = '', $social_post_mode = '' ) {
+		self::set_task_context( 'social' );
 		if ( $campaign_id ) {
 			$campaign = self::get_draft_campaign( $campaign_id );
 
@@ -612,7 +799,7 @@ class Bcsend_AI_Service {
 	 * @param int $campaign_id Campaign ID.
 	 * @return array|WP_Error
 	 */
-	private static function get_draft_campaign( $campaign_id ) {
+	public static function get_draft_campaign( $campaign_id ) {
 		global $wpdb;
 
 		$table    = $wpdb->prefix . 'bcsend_campaigns';
@@ -638,6 +825,19 @@ class Bcsend_AI_Service {
 	 * @param int $template_id Template ID.
 	 * @return string
 	 */
+	/**
+	 * HTML of the site's default template (empty string when none is set).
+	 *
+	 * This replaced the old Settings > Base Template blob: the design every
+	 * generation falls back to is now a real, visible template marked as
+	 * default on the Templates screen.
+	 *
+	 * @return string
+	 */
+	public static function get_default_template_html() {
+		return self::get_template_html( (int) get_option( 'bcsend_default_template_id', 0 ) );
+	}
+
 	private static function get_template_html( $template_id ) {
 		global $wpdb;
 

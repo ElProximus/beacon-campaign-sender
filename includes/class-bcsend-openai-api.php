@@ -33,10 +33,10 @@ class Bcsend_OpenAI_API {
 			$this->api_key = '';
 		}
 
-		$allowed_models = array( 'gpt-5.5', 'gpt-5.4', 'gpt-5.2', 'gpt-5-mini' );
+		$allowed_models = Bcsend_Model_Catalog::allowed_ids( 'openai' );
 		$this->model    = isset( $settings['openai_model'] ) && in_array( $settings['openai_model'], $allowed_models, true )
 			? $settings['openai_model']
-			: 'gpt-5.4';
+			: Bcsend_Model_Catalog::default_model( 'openai' );
 	}
 
 	public function is_configured() {
@@ -57,6 +57,15 @@ class Bcsend_OpenAI_API {
 	}
 
 	private function request( $input, $instructions = '', $max_tokens = self::MAX_OUTPUT_TOKENS ) {
+		// Models with catalog budgets (the GPT-5.6 family) use the per-task
+		// output budget - reasoning tokens draw from max_output_tokens, so
+		// the small legacy caps (512 push / 1024 social) would truncate them.
+		// Legacy models keep the caller-provided cap unchanged.
+		$catalog_entry = Bcsend_Model_Catalog::get( $this->model );
+		if ( $catalog_entry && ! empty( $catalog_entry['max_tokens'] ) ) {
+			$max_tokens = Bcsend_Model_Catalog::max_tokens( $this->model, Bcsend_AI_Service::get_task_context() );
+		}
+
 		$body = array(
 			'model'             => $this->model,
 			'input'             => $input,
@@ -67,6 +76,28 @@ class Bcsend_OpenAI_API {
 			$body['instructions'] = $instructions;
 		}
 
+		Bcsend_AI_Service::record_generation_meta(
+			array(
+				'effective_model' => $this->model,
+				'fallback_used'   => false,
+			)
+		);
+
+		/**
+		 * Whether to run this request in OpenAI's provider-native background
+		 * mode (submit, then poll the response ID in short requests). Enabled
+		 * by the background job runner - the provider then owns the
+		 * long-running execution instead of a fragile long HTTP request.
+		 *
+		 * @param bool $background Default false (interactive requests block).
+		 */
+		$use_background = Bcsend_Model_Catalog::supports_background( $this->model )
+			&& apply_filters( 'bcsend_openai_background', false );
+
+		if ( $use_background ) {
+			$body['background'] = true;
+		}
+
 		$args = array(
 			'method'  => 'POST',
 			'headers' => array(
@@ -74,7 +105,8 @@ class Bcsend_OpenAI_API {
 				'content-type'  => 'application/json',
 			),
 			'body'    => wp_json_encode( $body ),
-			'timeout' => 120,
+			/** This filter is documented in includes/class-bcsend-anthropic-api.php */
+			'timeout' => (int) apply_filters( 'bcsend_ai_request_timeout', 120 ),
 		);
 
 		$attempt    = 0;
@@ -104,6 +136,16 @@ class Bcsend_OpenAI_API {
 					),
 					'error'
 				);
+
+				// Ambiguous transport timeouts are never retried - the request
+				// may still complete and be billed at the provider.
+				if ( Bcsend_AI_Service::is_ambiguous_transport_error( $response ) ) {
+					return new WP_Error(
+						'ai_timeout_ambiguous',
+						__( 'The AI request timed out. It may still be processing (and billed) at the provider, so it was not retried automatically.', 'beacon-campaign-sender' )
+					);
+				}
+
 				continue;
 			}
 
@@ -124,6 +166,21 @@ class Bcsend_OpenAI_API {
 			);
 
 			if ( 200 === $code ) {
+				$status = isset( $decoded_body['status'] ) ? $decoded_body['status'] : '';
+
+				// Background submission accepted: the provider now owns the
+				// long-running execution; poll its status in short requests.
+				if ( $use_background && ! empty( $decoded_body['id'] ) && in_array( $status, array( 'queued', 'in_progress' ), true ) ) {
+					Bcsend_AI_Service::record_generation_meta( array( 'provider_response_id' => $decoded_body['id'] ) );
+
+					// Persist the ID on the job row NOW - if hosting kills
+					// this worker mid-poll, the pointer to the (billed)
+					// OpenAI result must survive.
+					do_action( 'bcsend_ai_provider_response_submitted', $decoded_body['id'] );
+
+					return $this->poll_background_response( $decoded_body['id'] );
+				}
+
 				$text = $this->extract_output_text( $decoded_body );
 
 				if ( '' !== $text ) {
@@ -131,6 +188,19 @@ class Bcsend_OpenAI_API {
 				}
 
 				return new WP_Error( 'openai_api_error', 'Unexpected response format from OpenAI API.', array( 'response' => $decoded_body ) );
+			}
+
+			// Timeout-family responses are ambiguous: an intermediary may
+			// have stopped waiting after OpenAI accepted the generation.
+			// Never submit a duplicate automatically. The deliberate residual
+			// tradeoff is that 500/502/503 remain retryable below even though
+			// a late intermediary failure can rarely be ambiguous too.
+			if ( in_array( $code, array( 408, 504, 524 ), true ) ) {
+				return new WP_Error(
+					'ai_timeout_ambiguous',
+					__( 'The AI request timed out at a gateway. It may still be processing (and billed) at the provider, so it was not retried automatically.', 'beacon-campaign-sender' ),
+					array( 'status_code' => $code )
+				);
 			}
 
 			if ( in_array( $code, array( 400, 401, 403, 404 ), true ) ) {
@@ -160,6 +230,139 @@ class Bcsend_OpenAI_API {
 		}
 
 		return $last_error;
+	}
+
+	/**
+	 * Fetch a previously-submitted background response by ID.
+	 *
+	 * Used to recover a job whose worker died after OpenAI accepted the
+	 * request: the generation may have completed (and been billed) on
+	 * OpenAI's side, and a plain GET carries no duplicate-generation or
+	 * billing risk.
+	 *
+	 * @param string $response_id OpenAI response ID.
+	 * @return array {status, text} - status is one of completed|pending|failed.
+	 */
+	public function fetch_background_response( $response_id ) {
+		if ( empty( $this->api_key ) || '' === (string) $response_id ) {
+			return array(
+				'status' => 'failed',
+				'text'   => '',
+			);
+		}
+
+		$response = wp_remote_get(
+			self::API_URL . '/' . rawurlencode( $response_id ),
+			array(
+				'headers' => array( 'Authorization' => 'Bearer ' . $this->api_key ),
+				'timeout' => 30,
+			)
+		);
+
+		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+			// Transport problem or transient provider error: unknown, not failed.
+			return array(
+				'status' => 'pending',
+				'text'   => '',
+			);
+		}
+
+		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
+		$status  = isset( $decoded['status'] ) ? $decoded['status'] : '';
+
+		if ( in_array( $status, array( 'queued', 'in_progress' ), true ) ) {
+			return array(
+				'status' => 'pending',
+				'text'   => '',
+			);
+		}
+
+		if ( 'completed' === $status ) {
+			return array(
+				'status' => 'completed',
+				'text'   => $this->extract_output_text( $decoded ),
+			);
+		}
+
+		return array(
+			'status' => 'failed',
+			'text'   => '',
+		);
+	}
+
+	/**
+	 * Poll a background response until it reaches a terminal state.
+	 *
+	 * Each poll is a short GET, so no single HTTP request has to outlive a
+	 * slow generation - host and proxy timeouts stop mattering. The overall
+	 * budget is the same filtered timeout the blocking path uses, keeping the
+	 * job lease valid. Transient poll failures are retried (polling a GET is
+	 * always billing-safe); budget exhaustion surfaces as the ambiguous
+	 * timeout so the job lands in the uncertain state with the provider
+	 * response ID recorded for follow-up.
+	 *
+	 * @param string $response_id OpenAI response ID.
+	 * @return string|WP_Error
+	 */
+	private function poll_background_response( $response_id ) {
+		/** This filter is documented in includes/class-bcsend-anthropic-api.php */
+		$deadline = time() + (int) apply_filters( 'bcsend_ai_request_timeout', 120 );
+
+		while ( time() < $deadline ) {
+			sleep( 5 );
+
+			$response = wp_remote_get(
+				self::API_URL . '/' . rawurlencode( $response_id ),
+				array(
+					'headers' => array(
+						'Authorization' => 'Bearer ' . $this->api_key,
+					),
+					'timeout' => 30,
+				)
+			);
+
+			if ( is_wp_error( $response ) ) {
+				// A failed status poll is always safe to retry.
+				continue;
+			}
+
+			$poll_code = (int) wp_remote_retrieve_response_code( $response );
+
+			// Rate limits and server errors on a status GET are transient and
+			// billing-safe to retry - only a 200 carries a real status.
+			if ( 200 !== $poll_code ) {
+				continue;
+			}
+
+			$decoded_body = json_decode( wp_remote_retrieve_body( $response ), true );
+			$status       = isset( $decoded_body['status'] ) ? $decoded_body['status'] : '';
+
+			if ( in_array( $status, array( 'queued', 'in_progress' ), true ) ) {
+				// The provider confirmed the job is alive - keep our own
+				// job lease alive to match.
+				do_action( 'bcsend_ai_lease_extend' );
+				continue;
+			}
+
+			if ( 'completed' === $status ) {
+				$text = $this->extract_output_text( $decoded_body );
+
+				if ( '' !== $text ) {
+					return $text;
+				}
+
+				return new WP_Error( 'openai_api_error', 'Background response completed without output text.', array( 'response' => $decoded_body ) );
+			}
+
+			$error_message = isset( $decoded_body['error']['message'] ) ? $decoded_body['error']['message'] : sprintf( 'Background response ended with status "%s".', $status );
+
+			return new WP_Error( 'openai_api_error', $error_message, array( 'response' => $decoded_body ) );
+		}
+
+		return new WP_Error(
+			'ai_timeout_ambiguous',
+			__( 'The AI request is still running at OpenAI after the polling window closed. It may complete (and be billed) at the provider; it was not retried automatically.', 'beacon-campaign-sender' )
+		);
 	}
 
 	private function extract_output_text( $decoded_body ) {

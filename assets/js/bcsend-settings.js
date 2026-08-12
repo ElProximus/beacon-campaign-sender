@@ -21,11 +21,32 @@
             this.bindTestButtons();
             this.bindZernioControls();
             this.bindFirebaseValidation();
-            this.bindTemplatePreview();
-            this.bindTemplateReset();
             this.bindModelSelector();
             this.bindSmtpToggle();
             this.bindSecretReplacements();
+            this.bindDefaultAccountLimit();
+        },
+
+        // The composer supports one default account per platform, so marking
+        // a default unchecks any sibling on the same platform (delegated -
+        // survives the table re-render after an account sync).
+        bindDefaultAccountLimit: function() {
+            $(document).on('change', 'input[name="bcsend_settings[social_default_accounts][]"]', function() {
+                var $box = $(this);
+                if (!$box.is(':checked')) {
+                    return;
+                }
+                var platform = String($box.data('platform') || '');
+                if (!platform) {
+                    return;
+                }
+                $('input[name="bcsend_settings[social_default_accounts][]"]')
+                    .not($box)
+                    .filter(function() {
+                        return String($(this).data('platform') || '') === platform;
+                    })
+                    .prop('checked', false);
+            });
         },
 
         /**
@@ -267,7 +288,14 @@
                 return;
             }
 
-            var html = '<table class="widefat striped"><thead><tr><th>Platform</th><th>Username</th><th>Account ID</th></tr></thead><tbody>';
+            // Preserve which accounts are currently marked as composer
+            // defaults - re-rendering after a sync must not erase them.
+            var checkedDefaults = {};
+            $container.find('input[name="bcsend_settings[social_default_accounts][]"]:checked').each(function() {
+                checkedDefaults[String($(this).val())] = true;
+            });
+
+            var html = '<table class="widefat striped"><thead><tr><th>Platform</th><th>Username</th><th>Account ID</th><th>Default</th></tr></thead><tbody>';
             $.each(accounts, function(_, account) {
                 if (!account || typeof account !== 'object') {
                     return;
@@ -293,9 +321,15 @@
                     '<td>' + Bcsend.escapeHtml(String(platform)) + '</td>' +
                     '<td>' + Bcsend.escapeHtml(String(username)) + '</td>' +
                     '<td><code>' + Bcsend.escapeHtml(accountId) + '</code></td>' +
+                    '<td><label><input type="checkbox" name="bcsend_settings[social_default_accounts][]" ' +
+                        'data-platform="' + Bcsend.escapeHtml(String(platform)) + '" ' +
+                        'value="' + Bcsend.escapeHtml(accountId) + '"' +
+                        (checkedDefaults[accountId] ? ' checked="checked"' : '') +
+                        ' /> Pre-select in composer</label></td>' +
                     '</tr>';
             });
-            html += '</tbody></table>';
+            html += '</tbody></table>' +
+                '<p class="description">Default accounts are pre-selected automatically when you create a new campaign.</p>';
 
             if (html.indexOf('<tr>') === -1) {
                 $container.html('<p class="description">No synced accounts yet.</p>');
@@ -364,49 +398,6 @@
                 } catch (e) {
                     $hint.text('Invalid JSON format. Please check your input.').css('color', '#d63638');
                 }
-            });
-        },
-
-        /**
-         * Bind the base template preview button.
-         */
-        bindTemplatePreview: function() {
-            $('#bcsend-preview-template').on('click', function(e) {
-                e.preventDefault();
-                var $textarea = $('#bcsend-base-template');
-                var html = $textarea.val();
-                if (!html) {
-                    Bcsend.notify('No template content to preview.', 'warning');
-                    return;
-                }
-
-                var win = window.open('', '_blank', 'width=700,height=600');
-                if (win) {
-                    win.document.open();
-                    win.document.write(html);
-                    win.document.close();
-                }
-            });
-        },
-
-        /**
-         * Bind the reset-to-default button for the base template.
-         */
-        bindTemplateReset: function() {
-            $('#bcsend-reset-template').on('click', function(e) {
-                e.preventDefault();
-                var $btn = $(this);
-                Bcsend.loading($btn, true);
-
-                Bcsend.ajax('bcsend_get_default_template', {}, function(response) {
-                    Bcsend.loading($btn, false);
-                    if (response.success && response.data.template) {
-                        $('#bcsend-base-template').val(response.data.template);
-                        Bcsend.notify('Template reset to default.', 'success');
-                    } else {
-                        Bcsend.notify(response.data.message || 'Failed to load default template.', 'error');
-                    }
-                });
             });
         },
 

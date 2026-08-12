@@ -30,12 +30,33 @@ if ( ! $is_editing && ! empty( $template ) && ! empty( $template->html_content )
 
 $social_platforms_meta = Bcsend_Social_Workflow::get_platform_metadata();
 $social_posts_index    = array();
-$settings_post_mode    = isset( $settings['zernio_post_mode'] ) && in_array( $settings['zernio_post_mode'], array( 'single', 'per_platform' ), true ) ? $settings['zernio_post_mode'] : 'single';
-$social_post_mode      = $is_editing && ! empty( $campaign->social_post_mode ) && in_array( $campaign->social_post_mode, array( 'single', 'per_platform' ), true ) ? $campaign->social_post_mode : $settings_post_mode;
-$shared_social_content = '';
-$shared_social_media   = array();
-$shared_link_mode      = 'none';
-$shared_link_url       = '';
+
+$social_default_enabled  = ! empty( $settings['social_default_enabled'] );
+$social_default_accounts = isset( $settings['social_default_accounts'] ) && is_array( $settings['social_default_accounts'] ) ? array_map( 'strval', $settings['social_default_accounts'] ) : array();
+
+$bcsend_extract_account_id = static function ( $account ) {
+	foreach ( array( 'id', '_id', 'accountId', 'account_id', 'uuid' ) as $key ) {
+		if ( isset( $account[ $key ] ) && '' !== (string) $account[ $key ] ) {
+			return (string) $account[ $key ];
+		}
+	}
+	return '';
+};
+
+$bcsend_extract_account_label = static function ( $account, $fallback = '' ) {
+	foreach ( array( 'username', 'handle', 'name', 'displayName' ) as $key ) {
+		if ( isset( $account[ $key ] ) && '' !== (string) $account[ $key ] ) {
+			return (string) $account[ $key ];
+		}
+	}
+	return $fallback;
+};
+$settings_post_mode           = isset( $settings['zernio_post_mode'] ) && in_array( $settings['zernio_post_mode'], array( 'single', 'per_platform' ), true ) ? $settings['zernio_post_mode'] : 'single';
+$social_post_mode             = $is_editing && ! empty( $campaign->social_post_mode ) && in_array( $campaign->social_post_mode, array( 'single', 'per_platform' ), true ) ? $campaign->social_post_mode : $settings_post_mode;
+$shared_social_content        = '';
+$shared_social_media          = array();
+$shared_link_mode             = 'none';
+$shared_link_url              = '';
 
 if ( ! empty( $social_posts ) ) {
 	foreach ( $social_posts as $social_post ) {
@@ -97,6 +118,7 @@ if ( ! empty( $social_posts ) ) {
 				</div>
 				<iframe id="bcsend-email-preview"
 						class="bcsend-email-preview-iframe"
+						sandbox="allow-same-origin"
 						<?php if ( $is_editing && ! empty( $campaign->html_content ) ) : ?>
 							srcdoc="<?php echo esc_attr( $campaign->html_content ); ?>"
 						<?php elseif ( ! empty( $loaded_template_html ) ) : ?>
@@ -346,6 +368,10 @@ if ( ! empty( $social_posts ) ) {
 										<?php esc_html_e( 'All App Users', 'beacon-campaign-sender' ); ?>
 									</label>
 									<label class="bcsend-radio-label">
+										<input type="radio" name="bcsend-push-target-type" value="all_subscribers" <?php checked( $current_push_target_type, 'all_subscribers' ); ?> />
+										<?php esc_html_e( 'All Subscribers (incl. web)', 'beacon-campaign-sender' ); ?>
+									</label>
+									<label class="bcsend-radio-label">
 										<input type="radio" name="bcsend-push-target-type" value="by_role" <?php checked( $current_push_target_type, 'by_role' ); ?> />
 										<?php esc_html_e( 'By Role', 'beacon-campaign-sender' ); ?>
 									</label>
@@ -382,13 +408,13 @@ if ( ! empty( $social_posts ) ) {
 					<label for="bcsend-send-social" class="bcsend-push-toggle">
 						<input type="checkbox"
 								id="bcsend-send-social"
-								<?php checked( $is_editing && ! empty( $campaign->send_social ) ); ?>
+								<?php checked( $is_editing ? ! empty( $campaign->send_social ) : $social_default_enabled ); ?>
 						/>
 						<?php esc_html_e( 'Include Social Posts', 'beacon-campaign-sender' ); ?>
 					</label>
 				</h3>
 
-				<div class="bcsend-social-fields" id="bcsend-social-fields" style="display:none;">
+				<div class="bcsend-social-fields bcsend-social-mode-<?php echo esc_attr( $social_post_mode ); ?>" id="bcsend-social-fields" style="display:none;">
 					<input type="hidden" id="bcsend-social-post-mode" value="<?php echo esc_attr( $social_post_mode ); ?>" />
 					<p class="description">
 						<?php echo 'single' === $social_post_mode ? esc_html__( 'Choose the social accounts for one shared Zernio post.', 'beacon-campaign-sender' ) : esc_html__( 'Choose the social platforms you want to publish alongside this campaign, then review copy, media, and links for each platform before scheduling.', 'beacon-campaign-sender' ); ?>
@@ -400,6 +426,48 @@ if ( ! empty( $social_posts ) ) {
 					<?php if ( empty( $social_accounts ) ) : ?>
 						<p class="description"><?php esc_html_e( 'No Zernio accounts have been synced yet. Go to Settings > Social and sync your connected accounts first.', 'beacon-campaign-sender' ); ?></p>
 					<?php else : ?>
+						<div class="bcsend-field-group">
+							<label><?php esc_html_e( 'Post to', 'beacon-campaign-sender' ); ?></label>
+							<div class="bcsend-social-account-choices" id="bcsend-social-account-choices">
+								<?php foreach ( $social_platforms_meta as $choice_platform => $choice_meta ) : ?>
+									<?php
+									$choice_accounts = array_values(
+										array_filter(
+											$social_accounts,
+											static function ( $account ) use ( $choice_platform ) {
+												return isset( $account['platform'] ) && $choice_platform === $account['platform'];
+											}
+										)
+									);
+									$choice_post     = isset( $social_posts_index[ $choice_platform ] ) ? $social_posts_index[ $choice_platform ] : null;
+									?>
+									<?php foreach ( $choice_accounts as $choice_index => $choice_account ) : ?>
+										<?php
+										$choice_account_id    = $bcsend_extract_account_id( $choice_account );
+										$choice_account_label = $bcsend_extract_account_label( $choice_account, $choice_account_id );
+										if ( '' === $choice_account_id ) {
+											continue;
+										}
+										if ( $is_editing ) {
+											$choice_saved_account = $choice_post && isset( $choice_post->account_id ) ? (string) $choice_post->account_id : '';
+											$choice_checked       = $choice_post && ( $choice_saved_account === $choice_account_id || ( '' === $choice_saved_account && 1 === count( $choice_accounts ) ) );
+										} else {
+											$choice_checked = in_array( $choice_account_id, $social_default_accounts, true );
+										}
+										?>
+										<label class="bcsend-social-account-choice">
+											<input type="checkbox"
+													class="bcsend-social-account-choice-input"
+													data-platform="<?php echo esc_attr( $choice_platform ); ?>"
+													data-account-id="<?php echo esc_attr( $choice_account_id ); ?>"
+													<?php checked( $choice_checked ); ?> />
+											<span><?php echo esc_html( $choice_meta['label'] . ' — ' . $choice_account_label ); ?></span>
+										</label>
+									<?php endforeach; ?>
+								<?php endforeach; ?>
+							</div>
+							<p class="description"><?php esc_html_e( 'One click per account — no dropdowns. Set your usual accounts as defaults in Settings > Social.', 'beacon-campaign-sender' ); ?></p>
+						</div>
 						<div id="bcsend-social-shared-fields" class="bcsend-social-shared-fields" data-initial-media="<?php echo esc_attr( wp_json_encode( $shared_social_media ) ); ?>" style="<?php echo 'single' === $social_post_mode ? '' : 'display:none;'; ?>">
 							<div class="bcsend-field-group">
 								<label for="bcsend-social-content-shared"><?php esc_html_e( 'Social Copy', 'beacon-campaign-sender' ); ?></label>
@@ -482,7 +550,7 @@ if ( ! empty( $social_posts ) ) {
 								</label>
 
 								<div class="bcsend-social-platform-content" data-platform="<?php echo esc_attr( $platform_slug ); ?>" style="<?php echo $is_checked ? 'display:block;' : 'display:none;'; ?>">
-									<div class="bcsend-field-group">
+									<div class="bcsend-field-group bcsend-social-account-group">
 										<label for="bcsend-social-account-<?php echo esc_attr( $platform_slug ); ?>"><?php esc_html_e( 'Account', 'beacon-campaign-sender' ); ?></label>
 										<select id="bcsend-social-account-<?php echo esc_attr( $platform_slug ); ?>"
 												class="large-text bcsend-social-account-select"
@@ -515,18 +583,21 @@ if ( ! empty( $social_posts ) ) {
 
 									<div class="bcsend-field-group">
 										<label for="bcsend-social-content-<?php echo esc_attr( $platform_slug ); ?>">
-											<?php echo esc_html( sprintf( __( '%s Copy', 'beacon-campaign-sender' ), $platform_meta['label'] ) ); ?>
+											<?php
+											/* translators: %s: social platform label (e.g. Facebook). */
+											echo esc_html( sprintf( __( '%s Copy', 'beacon-campaign-sender' ), $platform_meta['label'] ) );
+											?>
 										</label>
 										<textarea id="bcsend-social-content-<?php echo esc_attr( $platform_slug ); ?>"
 												class="large-text bcsend-social-textarea"
 												data-platform="<?php echo esc_attr( $platform_slug ); ?>"
-												data-max="<?php echo esc_attr( $platform_meta['max_chars'] ); ?>"
+												data-max="<?php echo esc_attr( isset( $platform_meta['maxChars'] ) ? $platform_meta['maxChars'] : 500 ); ?>"
 												rows="4"
-												placeholder="<?php echo esc_attr( sprintf( __( 'Write %s copy', 'beacon-campaign-sender' ), $platform_meta['label'] ) ); ?>"><?php echo esc_textarea( $current_content ); ?></textarea>
+												placeholder="<?php /* translators: %s: social platform label (e.g. Facebook). */ echo esc_attr( sprintf( __( 'Write %s copy', 'beacon-campaign-sender' ), $platform_meta['label'] ) ); ?>"><?php echo esc_textarea( $current_content ); ?></textarea>
 										<span class="bcsend-char-counter">
 											<span class="bcsend-social-char-count" data-platform="<?php echo esc_attr( $platform_slug ); ?>">
 												<?php echo esc_html( mb_strlen( $current_content ) ); ?>
-											</span>/<?php echo esc_html( $platform_meta['max_chars'] ); ?>
+											</span>/<?php echo esc_html( isset( $platform_meta['maxChars'] ) ? $platform_meta['maxChars'] : 500 ); ?>
 										</span>
 									</div>
 

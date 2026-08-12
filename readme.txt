@@ -4,7 +4,7 @@ Tags: email, newsletter, push notifications, ai, marketing
 Requires at least: 5.8
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.5
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -177,6 +177,45 @@ Beacon Campaign Sender stores subscriber sign-up records and email logs locally 
 The plugin integrates with WordPress personal data exporters and erasers for locally stored subscriber and email log records.
 
 == Changelog ==
+
+= 1.1.0 =
+**AI generation**
+- Generation now runs as a tracked background job instead of one long browser request: a live status with elapsed time, survives page reloads and closed tabs (results finished while you were away are offered as Apply/Discard), never runs the same job twice, and protects newer edits from being overwritten by a late result.
+- New AI models: Claude Sonnet 5 (recommended), Opus 5, and Fable 5 (premium, opt-in) with previous Claude models under Legacy; OpenAI GPT-5.6 Terra (recommended), Sol, and Luna running in OpenAI's server-side background mode. Existing installs keep their saved model.
+- If Fable 5's stricter safety system declines an ordinary request, Beacon retries once on Opus 5 and labels the result honestly (on by default, refusals only - never errors or timeouts).
+- Interrupted OpenAI generations are recovered from OpenAI's servers instead of abandoning an already-billed result; gateway timeouts (HTTP 408/504/524) are never retried automatically, so a slow generation can no longer be billed twice.
+- A generation can no longer be started for a deleted or already-sent campaign, and a dead background job can no longer block a campaign for other users.
+
+**Composer & social**
+- Save/schedule results (including validation errors) appear right next to the buttons and stay until addressed, instead of a vanishing top-of-page notice.
+- Flat one-click social account checkboxes replace the platform-toggle + dropdown flow; "Include Social Posts" only changes when you change it and round-trips faithfully.
+- Settings > Social composer defaults: mark accounts as defaults (one per platform, enforced) and optionally start new campaigns with social on; syncing accounts preserves your defaults.
+- Character counters actually work (280 X/Twitter, 3,000 LinkedIn, 2,200 Instagram).
+
+**Templates**
+- The Templates screen shows each whole email scaled to its card; click a design to start a campaign from it.
+- A real default template (pinned first with a star) replaces the old Base Template setting, with automatic migration; deleting the default promotes another. Every new campaign opens with the default loaded.
+- Template preview is a proper centered modal (Esc, x, or click-outside to close).
+
+**Push notifications**
+- Push works without any companion app: web push via Firebase (service worker, subscribe button or floating bell), Firebase Topics for existing apps, token import, and an open registration endpoint for custom apps with an app-key path.
+- Device registry with per-IP throttling and a capacity cap that counts only active devices; dead tokens are cleaned up automatically after 30 days, and a Remove Stale Devices button frees capacity immediately.
+- Test Push is implemented for Firebase-only sites; pushes stuck mid-send recover automatically and can be deleted; Firebase topic names are no longer silently lowercased.
+
+**Reliability & security**
+- Settings saves are side-effect free while cleaning input: remote syncs (Zernio webhook, Brevo domain check) fire exactly once per save and only when their fields changed - a slow third party no longer freezes saving unrelated settings.
+- Users granted the plugin's own manage capability can actually save Settings (previously blocked by a WordPress core capability check).
+- Destructive template actions (delete, duplicate, change default) require the manager capability; delegated campaign editors keep their full visible workflow.
+- Rejected webhook requests can no longer flood the database or bury legitimate diagnostics; schema checks run once per upgrade instead of ~25 queries on every page view; background workers no longer leak the campaign author's identity into later tasks.
+- If stored API keys can no longer be decrypted (e.g. security keys rotated during a host migration), Beacon says so and asks for re-entry instead of sending unusable values to providers.
+- Multisite: network activation sets up every site, new sites are provisioned automatically, and uninstall cleans the whole network.
+- Removed a hardcoded fallback subscriber list; an empty Default Subscriber Lists setting now honestly means no default lists.
+
+= 1.0.6 (unreleased) =
+- Composer save and schedule results (including validation errors) now appear right next to the Save/Schedule buttons and stay visible until addressed, instead of a top-of-page notice that disappears after five seconds.
+- Replaced the social platform toggle + account dropdown flow with flat one-click account checkboxes: every connected account is listed visibly and picking one is a single click.
+- Generated content no longer switches on "Include Social Posts" by itself; the checkbox only changes when you change it, and its saved state is restored faithfully when reopening a campaign.
+- New Settings > Social composer defaults: mark connected accounts as defaults and optionally start every new campaign with social posting on and those accounts pre-selected.
 
 = 1.0.5 =
 - Added a Settings > Access tab to grant campaign access (Dashboard, Composer, and Campaign Queue) to existing Author-or-higher users without making them administrators.

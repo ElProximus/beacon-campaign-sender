@@ -126,11 +126,24 @@ $list_url = add_query_arg( array( 'page' => 'bcsend-push' ), admin_url( 'admin.p
 						<input type="radio" name="bcsend-push-recipients" value="all_users" checked /> <?php esc_html_e( 'All App Users', 'beacon-campaign-sender' ); ?>
 					</label>
 					<label class="bcsend-radio-label" style="display: block; margin-bottom: 6px;">
+						<input type="radio" name="bcsend-push-recipients" value="all_subscribers" /> <?php esc_html_e( 'All Subscribers (every registered device, including web visitors)', 'beacon-campaign-sender' ); ?>
+					</label>
+					<label class="bcsend-radio-label" style="display: block; margin-bottom: 6px;">
+						<input type="radio" name="bcsend-push-recipients" value="topic" /> <?php esc_html_e( 'Firebase Topic (devices your app subscribed to a topic)', 'beacon-campaign-sender' ); ?>
+					</label>
+					<label class="bcsend-radio-label" style="display: block; margin-bottom: 6px;">
 						<input type="radio" name="bcsend-push-recipients" value="by_role" /> <?php esc_html_e( 'By Role', 'beacon-campaign-sender' ); ?>
 					</label>
 					<label class="bcsend-radio-label" style="display: block;">
 						<input type="radio" name="bcsend-push-recipients" value="specific_users" /> <?php esc_html_e( 'Specific Users', 'beacon-campaign-sender' ); ?>
 					</label>
+				</div>
+
+				<!-- Topic: name input -->
+				<div id="bcsend-push-topic-fields" style="display: none; margin-top: 12px; padding: 15px; background: #f6f7f7; border-radius: 4px;">
+					<label for="bcsend-push-topic"><strong><?php esc_html_e( 'Topic name', 'beacon-campaign-sender' ); ?></strong></label>
+					<input type="text" id="bcsend-push-topic" class="regular-text" placeholder="all" style="display: block; margin-top: 6px;" />
+					<p class="description"><?php esc_html_e( 'The FCM topic your mobile app subscribes devices to (e.g. "all" or "news"). One send reaches every subscribed device — no token import needed.', 'beacon-campaign-sender' ); ?></p>
 				</div>
 
 				<!-- By Role: checkboxes -->

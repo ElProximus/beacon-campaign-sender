@@ -21,11 +21,14 @@
         init: function() {
             this.campaignId = $('#bcsend-campaign-id').val() || this.getUrlParam('campaign_id');
             this.templateId = $('#bcsend-template-id').val() || this.getUrlParam('template_id');
+            this.aiJobs = {};
+            this.dirtyCounter = 0;
             this.bindGenerate();
             this.bindFieldEvents();
             this.bindHtmlEditor();
             this.bindSchedule();
             this.bindActions();
+            this.bindDirtyTracking();
             this.loadSegments();
             ContentLibrary.init();
             this.initSocialEditor();
@@ -33,6 +36,17 @@
             if (this.campaignId) {
                 this.loadCampaign(this.campaignId);
             }
+
+            this.resumeAiJobs();
+        },
+
+        // Count composer edits so a background result that arrives after the
+        // user kept typing is offered for review instead of silently applied.
+        bindDirtyTracking: function() {
+            var self = this;
+            $('.bcsend-panel-right, .bcsend-panel-left').on('input change', function() {
+                self.dirtyCounter++;
+            });
         },
 
         getUrlParam: function(name) {
@@ -733,48 +747,18 @@
                 }
 
                 if (!data.channels.length) {
-                    Bcsend.notify('Select at least one channel to generate: email, push, or social.', 'warning');
+                    self.setGenerateStatus('Select at least one channel to generate: email, push, or social.', 'warning');
                     return;
                 }
 
                 data.social_platforms = self.getSelectedSocialPlatforms();
 
                 if ($('#bcsend-send-social').is(':checked') && !data.social_platforms.length) {
-                    Bcsend.notify('Select at least one social platform to generate social posts.', 'warning');
+                    self.setGenerateStatus('Choose at least one social account to generate social posts.', 'warning');
                     return;
                 }
 
-                Bcsend.loading($btn, true);
-                $('#bcsend-generate-status').text('Generating...');
-
-                Bcsend.ajax('bcsend_generate_campaign', data, function(response) {
-                    Bcsend.loading($btn, false);
-                    $('#bcsend-generate-status').text('');
-
-                    if (response.success && response.data) {
-                        var generated = {};
-                        if (response.data.content) {
-                            try {
-                                generated = JSON.parse(response.data.content);
-                            } catch (e) {
-                                generated = { plain_text: response.data.content };
-                            }
-                        } else {
-                            generated = response.data;
-                        }
-                        self.populateFields(generated);
-                        if ($('#bcsend-send-social').is(':checked') && self.getSelectedSocialPlatforms().length && (!generated.social || !Object.keys(generated.social).length)) {
-                            Bcsend.notify('Campaign generation returned no social copy for the selected platforms.', 'warning');
-                        }
-                        Bcsend.notify('Campaign content generated.', 'success');
-
-                        // Auto-save draft after generation.
-                        self.autoSaveDraft();
-                    } else {
-                        var errMsg = (response.data && response.data.message) ? response.data.message : 'Generation failed.';
-                        Bcsend.notify(errMsg, 'error');
-                    }
-                });
+                self.startAiJob('campaign', data);
             });
         },
 
@@ -792,16 +776,20 @@
             }
 
             var data = this.collectData();
-            $('#bcsend-save-status').text('Saving...');
+            this.setSaveStatus('Saving...');
 
             Bcsend.ajax('bcsend_save_draft', data, function(response) {
-                $('#bcsend-save-status').text('');
+                self.setSaveStatus('');
                 if (response.success) {
                     if (response.data.id) { self.campaignId = response.data.id; }
-                    $('#bcsend-save-status').text('Draft saved').delay(2000).queue(function(next) { $(this).text(''); next(); });
                     if (response.data.warnings && response.data.warnings.length) {
-                        Bcsend.notify(response.data.warnings.join(' '), 'warning');
+                        self.setSaveStatus('Draft saved. ' + response.data.warnings.join(' '), 'warning');
+                    } else {
+                        self.setSaveStatus('Draft saved', 'success');
                     }
+                } else {
+                    var msg = (response.data && response.data.message) ? response.data.message : 'Automatic draft save failed - use Save Draft to keep this content.';
+                    self.setSaveStatus(msg, 'error');
                 }
             });
         },
@@ -824,9 +812,10 @@
                 this.campaignId = data.campaign_id || data.id;
             }
 
-            if (data.social) {
+            // Only apply generated social content when the user has social enabled —
+            // never flip the Include Social Posts checkbox on their behalf.
+            if (data.social && $('#bcsend-send-social').is(':checked')) {
                 var self = this;
-                $('#bcsend-send-social').prop('checked', true).trigger('change');
                 if (self.isSingleSocialMode()) {
                     var sharedPayload = null;
                     $.each(data.social, function(platform, entry) {
@@ -988,35 +977,43 @@
 
             // Regenerate push.
             $('#bcsend-regenerate-push').on('click', function() {
-                var $btn = $(this);
                 var context = $.trim($('#bcsend-subject').val()) + ' ' + $.trim($('#bcsend-plain-text').val());
 
                 if (!$.trim(context)) {
-                    Bcsend.notify('No content context for push regeneration.', 'warning');
+                    self.inlineStatus('#bcsend-regen-push-status', 'No content context for push regeneration.', 'warning');
                     return;
                 }
 
-                Bcsend.loading($btn, true);
-                $('#bcsend-regen-push-status').text('Regenerating...');
-
-                Bcsend.ajax('bcsend_regenerate_push', { context_text: context }, function(response) {
-                    Bcsend.loading($btn, false);
-                    $('#bcsend-regen-push-status').text('');
-
-                    if (response.success && response.data) {
-                        if (response.data.push_title) {
-                            $('#bcsend-push-title').val(response.data.push_title).trigger('input');
-                        }
-                        if (response.data.push_message) {
-                            $('#bcsend-push-message').val(response.data.push_message).trigger('input');
-                        }
-                        Bcsend.notify('Push content regenerated.', 'success');
-                    } else {
-                        var errMsg = (response.data && response.data.message) ? response.data.message : 'Failed to regenerate.';
-                        Bcsend.notify(errMsg, 'error');
-                    }
-                });
+                self.startAiJob('push', { context_text: context });
             });
+
+            // Flat one-click account checkboxes drive the underlying platform
+            // toggle + account select (kept for data collection/back-compat).
+            // Bound and applied BEFORE the platform-enabled handler below, so
+            // its init .trigger('change') cannot wipe server-rendered defaults.
+            $('.bcsend-social-account-choice-input').on('change', function() {
+                var $box = $(this);
+                var platform = $box.data('platform');
+                var accountId = String($box.data('account-id'));
+
+                if ($box.is(':checked')) {
+                    // One account per platform: checking one unchecks its siblings.
+                    $('.bcsend-social-account-choice-input[data-platform="' + platform + '"]').not($box).prop('checked', false);
+                    $('#bcsend-social-account-' + platform).val(accountId);
+                    $('.bcsend-social-platform-enabled[data-platform="' + platform + '"]').prop('checked', true).trigger('change');
+                } else if (!$('.bcsend-social-account-choice-input[data-platform="' + platform + '"]:checked').length) {
+                    $('#bcsend-social-account-' + platform).val('');
+                    $('.bcsend-social-platform-enabled[data-platform="' + platform + '"]').prop('checked', false).trigger('change');
+                }
+            });
+
+            $('.bcsend-social-account-select').on('change', function() {
+                self.syncAccountChoicesFromControls($(this).data('platform'));
+            });
+
+            // Apply any pre-checked account choices (settings defaults on a new
+            // campaign, or saved selections when editing) to the underlying controls.
+            $('.bcsend-social-account-choice-input:checked').trigger('change');
 
             $('.bcsend-social-platform-enabled').on('change', function() {
                 var platform = $(this).data('platform');
@@ -1024,6 +1021,7 @@
                 self.updateSocialPlatformStatus(platform);
                 self.applySocialPostModeUI();
                 self.updateSharedSocialStatus();
+                self.syncAccountChoicesFromControls(platform);
             }).trigger('change');
 
             $('#bcsend-social-content-shared').on('input', function() {
@@ -1082,79 +1080,24 @@
             });
 
             $('#bcsend-regenerate-social').on('click', function() {
-                var $btn = $(this);
                 var platforms = self.getSelectedSocialPlatforms();
                 var context = $.trim($('#bcsend-subject').val()) + "\n" + $.trim($('#bcsend-plain-text').val()) + "\n" + $.trim($('#bcsend-campaign-prompt').val());
 
                 if (!platforms.length) {
-                    Bcsend.notify('Select at least one social platform first.', 'warning');
+                    self.inlineStatus('#bcsend-regen-social-status', 'Choose at least one social account first.', 'warning');
                     return;
                 }
 
                 if (!$.trim(context)) {
-                    Bcsend.notify('No context available for social regeneration.', 'warning');
+                    self.inlineStatus('#bcsend-regen-social-status', 'No context available for social regeneration.', 'warning');
                     return;
                 }
 
-                Bcsend.loading($btn, true);
-                $('#bcsend-regen-social-status').text('Regenerating...');
-
-                Bcsend.ajax('bcsend_regenerate_social', {
-                    campaign_id: self.campaignId || '',
+                self.startAiJob('social', {
                     context_text: context,
                     social_platforms: platforms,
                     prompt: $.trim($('#bcsend-campaign-prompt').val()),
                     social_post_mode: self.getSocialPostMode()
-                }, function(response) {
-                    Bcsend.loading($btn, false);
-                    $('#bcsend-regen-social-status').text('');
-
-                    if (!response.success || !response.data) {
-                        Bcsend.notify((response.data && response.data.message) || 'Failed to regenerate social copy.', 'error');
-                        return;
-                    }
-
-                    if (!response.data.social || !Object.keys(response.data.social).length) {
-                        Bcsend.notify('Social regeneration returned no platform copy. Please try again after confirming the platform is selected and the prompt has enough context.', 'warning');
-                        return;
-                    }
-
-                    if (self.isSingleSocialMode()) {
-                        var firstPayload = null;
-                        $.each(response.data.social || {}, function(_, entry) {
-                            if (!firstPayload) {
-                                firstPayload = self.normalizeSocialPayload(entry);
-                            }
-                        });
-                        if (firstPayload) {
-                            $('#bcsend-social-content-shared').val(firstPayload.content || '').trigger('input');
-                            $('#bcsend-social-link-mode-shared').val(firstPayload.link_mode || 'none').trigger('change');
-                            if (firstPayload.link_mode === 'custom') {
-                                $('#bcsend-social-link-url-shared').val(firstPayload.link_url || '').trigger('input');
-                            }
-                            var sharedSuggestedMedia = self.resolveSuggestedMediaItems(firstPayload);
-                            if (sharedSuggestedMedia.length) {
-                                self.setPlatformMedia('shared', sharedSuggestedMedia);
-                            }
-                        }
-                    } else {
-                        $.each(response.data.social || {}, function(platform, entry) {
-                            var payload = self.normalizeSocialPayload(entry);
-                            $('#bcsend-social-content-' + platform).val(payload.content || '').trigger('input');
-                            $('#bcsend-social-link-mode-' + platform).val(payload.link_mode || 'none').trigger('change');
-
-                            if (payload.link_mode === 'custom') {
-                                $('#bcsend-social-link-url-' + platform).val(payload.link_url || '').trigger('input');
-                            }
-
-                            var suggestedMedia = self.resolveSuggestedMediaItems(payload);
-                            if (suggestedMedia.length) {
-                                self.setPlatformMedia(platform, suggestedMedia);
-                            }
-                        });
-                    }
-
-                    Bcsend.notify('Social copy regenerated.', 'success');
                 });
             });
         },
@@ -1218,37 +1161,16 @@
 
             // Regenerate the HTML email body from the current content context.
             $('#bcsend-regenerate-html').on('click', function() {
-                var $btn = $(this);
                 var context = $.trim($('#bcsend-subject').val()) + "\n" +
                     $.trim($('#bcsend-plain-text').val()) + "\n" +
                     $.trim($('#bcsend-campaign-prompt').val());
 
                 if (!$.trim(context)) {
-                    Bcsend.notify('No content context for HTML regeneration.', 'warning');
+                    self.inlineStatus('#bcsend-regen-html-status', 'No content context for HTML regeneration.', 'warning');
                     return;
                 }
 
-                Bcsend.loading($btn, true);
-                $('#bcsend-regen-html-status').text('Regenerating...');
-
-                Bcsend.ajax('bcsend_regenerate_html', {
-                    campaign_id: self.campaignId || '',
-                    prompt: context
-                }, function(response) {
-                    Bcsend.loading($btn, false);
-                    $('#bcsend-regen-html-status').text('');
-
-                    if (response.success && response.data && response.data.html_content) {
-                        $('#bcsend-html-editor').val(response.data.html_content);
-                        self.updateEmailPreview(response.data.html_content);
-                        self.htmlSynced = true;
-                        self.updateSyncIndicator();
-                        Bcsend.notify('HTML regenerated.', 'success');
-                    } else {
-                        var errMsg = (response.data && response.data.message) ? response.data.message : 'Failed to regenerate HTML.';
-                        Bcsend.notify(errMsg, 'error');
-                    }
-                });
+                self.startAiJob('html', { prompt: context });
             });
 
             // Track edits in the code editor.
@@ -1298,6 +1220,543 @@
         },
 
         /* ============================================================
+           Flat Account Choices
+           ============================================================ */
+
+        // Reflect the hidden platform checkbox + account select back into the
+        // visible one-click account checkboxes (used when a campaign or
+        // generated content sets those controls programmatically).
+        syncAccountChoicesFromControls: function(platform) {
+            var enabled = $('.bcsend-social-platform-enabled[data-platform="' + platform + '"]').is(':checked');
+            var accountId = String($('#bcsend-social-account-' + platform).val() || '');
+            var $choices = $('.bcsend-social-account-choice-input[data-platform="' + platform + '"]');
+
+            if (!$choices.length) {
+                return;
+            }
+
+            if (!enabled) {
+                $choices.prop('checked', false);
+                return;
+            }
+
+            if (accountId) {
+                $choices.each(function() {
+                    $(this).prop('checked', String($(this).data('account-id')) === accountId);
+                });
+            } else if (1 === $choices.length) {
+                // Platform enabled with no account picked and only one account
+                // available: select it so the save cannot fail on it.
+                $choices.prop('checked', true);
+                $('#bcsend-social-account-' + platform).val(String($choices.data('account-id')));
+            }
+        },
+
+        /* ============================================================
+           Background AI Jobs (enqueue, poll, resume)
+           ============================================================ */
+
+        aiJobTypeConfig: function(type) {
+            var self = this;
+            var configs = {
+                campaign: {
+                    statusSel: '#bcsend-generate-status',
+                    buttonSel: '#bcsend-generate-campaign',
+                    doneLabel: 'Campaign content generated.',
+                    legacyAction: 'bcsend_generate_campaign',
+                    apply: function(data) { self.applyCampaignResult(data); }
+                },
+                html: {
+                    statusSel: '#bcsend-regen-html-status',
+                    buttonSel: '#bcsend-regenerate-html',
+                    doneLabel: 'HTML regenerated.',
+                    legacyAction: 'bcsend_regenerate_html',
+                    apply: function(data) { self.applyHtmlResult(data); }
+                },
+                push: {
+                    statusSel: '#bcsend-regen-push-status',
+                    buttonSel: '#bcsend-regenerate-push',
+                    doneLabel: 'Push content regenerated.',
+                    legacyAction: 'bcsend_regenerate_push',
+                    apply: function(data) { self.applyPushResult(data); }
+                },
+                social: {
+                    statusSel: '#bcsend-regen-social-status',
+                    buttonSel: '#bcsend-regenerate-social',
+                    doneLabel: 'Social copy regenerated.',
+                    legacyAction: 'bcsend_regenerate_social',
+                    apply: function(data) { self.applySocialResult(data); }
+                }
+            };
+            return configs[type];
+        },
+
+        // Render a status message with optional action links (e.g. "Apply
+        // result", "Run in foreground"). Built with DOM methods - message
+        // text is never injected as HTML.
+        aiJobStatusActions: function(selector, message, tone, actions) {
+            var $s = $(selector);
+            if (!$s.length) { return; }
+            $s.stop(true, true).clearQueue();
+            $s.removeClass('is-error is-success is-warning');
+            if (tone) { $s.addClass('is-' + tone); }
+            $s.empty().append(document.createTextNode(message + ' '));
+            $.each(actions || [], function(_, action) {
+                var $link = $('<button type="button" class="button-link bcsend-job-action"></button>').text(action.label);
+                $link.on('click', function(e) {
+                    e.preventDefault();
+                    action.run();
+                });
+                $s.append($link).append(document.createTextNode(' '));
+            });
+        },
+
+        formatJobElapsed: function(ms) {
+            var total = Math.max(0, Math.floor(ms / 1000));
+            var m = Math.floor(total / 60);
+            var s = total % 60;
+            return m + ':' + (s < 10 ? '0' : '') + s;
+        },
+
+        // Start a background generation job. `data` is the same payload the
+        // legacy synchronous endpoint takes, so the explicit foreground
+        // fallback can reuse it unchanged.
+        startAiJob: function(type, data) {
+            var self = this;
+            var cfg = this.aiJobTypeConfig(type);
+            var $btn = $(cfg.buttonSel);
+
+            // Capture edit state at click time, not at enqueue-response time -
+            // anything typed after this click was not part of the job's input.
+            var dirtyAtClick = this.dirtyCounter;
+
+            var enqueue = function() {
+                Bcsend.loading($btn, true);
+                self.inlineStatus(cfg.statusSel, 'Queued...');
+
+                var payload = $.extend({}, data, { job_type: type, campaign_id: self.campaignId || 0 });
+
+                Bcsend.ajax('bcsend_ai_job_enqueue', payload, function(response) {
+                    if (!response.success || !response.data || !response.data.job) {
+                        Bcsend.loading($btn, false);
+                        var msg = (response.data && response.data.message) ? response.data.message : 'Could not start generation.';
+                        self.inlineStatus(cfg.statusSel, msg, 'error');
+                        return;
+                    }
+                    // An existing job resumed from another tab may have been
+                    // started with different inputs - force review on delivery.
+                    var inputMismatch = response.data.existing && false === response.data.input_matches;
+
+                    self.watchAiJob(response.data.job, type, {
+                        elapsed: 0,
+                        dirtyAt: dirtyAtClick,
+                        data: data,
+                        reviewOnly: inputMismatch
+                    });
+                });
+            };
+
+            // Every job type gets a stable campaign ID: save a draft first
+            // whenever the campaign has never been saved. A failed save
+            // aborts the job - generating against a phantom campaign would
+            // orphan the result (and the server refuses campaign_id 0).
+            if (!self.campaignId) {
+                self.saveDraftThen(enqueue, function(msg) {
+                    self.inlineStatus(cfg.statusSel, msg, 'error');
+                });
+            } else {
+                enqueue();
+            }
+        },
+
+        // Save a draft (naming it if needed) and continue only once a stable
+        // campaign ID exists - a failed save must not start generation.
+        saveDraftThen: function(next, onFail) {
+            var self = this;
+
+            if (!$.trim($('#bcsend-campaign-name').val())) {
+                var subject = $.trim($('#bcsend-subject').val());
+                $('#bcsend-campaign-name').val(subject ? subject : 'Draft - ' + new Date().toLocaleDateString());
+            }
+
+            Bcsend.ajax('bcsend_save_draft', this.collectData(), function(response) {
+                if (response.success && response.data && response.data.id) {
+                    self.campaignId = response.data.id;
+                    next();
+                    return;
+                }
+
+                var msg = (response.data && response.data.message) ? response.data.message : 'Could not save a draft for this campaign.';
+                self.setSaveStatus(msg, 'error');
+                if (onFail) { onFail(msg); }
+            });
+        },
+
+        watchAiJob: function(token, type, meta) {
+            var self = this;
+            var cfg = this.aiJobTypeConfig(type);
+            var $btn = $(cfg.buttonSel);
+
+            this.stopAiJob(token);
+
+            var state = {
+                type: type,
+                startMs: Date.now() - ((meta.elapsed || 0) * 1000),
+                dirtyAt: ('undefined' !== typeof meta.dirtyAt) ? meta.dirtyAt : this.dirtyCounter,
+                data: meta.data || null,
+                reviewOnly: !!meta.reviewOnly,
+                lastStatus: 'queued',
+                model: '',
+                paused: false,
+                timerId: null,
+                pollId: null
+            };
+            this.aiJobs[token] = state;
+            Bcsend.loading($btn, true);
+
+            var label = function() {
+                var verbs = {
+                    queued: 'Queued',
+                    dispatching: 'Starting',
+                    submitted: state.model ? 'Generating with ' + state.model : 'Generating'
+                };
+                return (verbs[state.lastStatus] || 'Working') + ' - ' + self.formatJobElapsed(Date.now() - state.startMs);
+            };
+
+            // The elapsed timer ticks locally every second; it is not a
+            // server signal and costs no requests.
+            state.timerId = window.setInterval(function() {
+                if (!state.paused) {
+                    self.inlineStatus(cfg.statusSel, label());
+                }
+            }, 1000);
+
+            var finish = function() {
+                self.stopAiJob(token);
+                Bcsend.loading($btn, false);
+            };
+
+            var schedulePoll = function() {
+                var elapsed = (Date.now() - state.startMs) / 1000;
+                var delay = elapsed < 30 ? 2000 : (elapsed < 120 ? 5000 : 15000);
+                if (document.hidden) { delay = Math.max(delay, 30000); }
+                state.pollId = window.setTimeout(poll, delay);
+            };
+
+            var poll = function() {
+                Bcsend.ajax('bcsend_ai_job_status', { job: token }, function(response) {
+                    if (!self.aiJobs[token]) { return; }
+
+                    if (!response.success || !response.data) {
+                        // Transient poll failure - keep watching.
+                        schedulePoll();
+                        return;
+                    }
+
+                    var d = response.data;
+                    state.lastStatus = d.status;
+                    state.model = d.model || '';
+                    state.startMs = Date.now() - ((d.elapsed || 0) * 1000);
+
+                    if ('completed' === d.status) {
+                        finish();
+                        self.deliverAiJobResult(token, type, cfg, state, d);
+                        return;
+                    }
+
+                    if ('failed' === d.status) {
+                        finish();
+                        self.inlineStatus(cfg.statusSel, d.error_message || 'Generation failed.', 'error');
+                        return;
+                    }
+
+                    if ('uncertain' === d.status) {
+                        finish();
+                        self.inlineStatus(cfg.statusSel, (d.error_message || 'Beacon lost contact with the background worker.') + ' It was not retried automatically - you can generate again.', 'warning');
+                        return;
+                    }
+
+                    if ('cancelled' === d.status || 'superseded' === d.status) {
+                        finish();
+                        self.inlineStatus(cfg.statusSel, '');
+                        return;
+                    }
+
+                    if (d.background_unavailable && state.data) {
+                        state.paused = true;
+                        self.aiJobStatusActions(
+                            cfg.statusSel,
+                            'Background processing appears unavailable on this host.',
+                            'warning',
+                            [
+                                {
+                                    label: 'Run in foreground',
+                                    run: function() {
+                                        // Only start a foreground request once the
+                                        // background job is confirmed cancelled -
+                                        // otherwise both could bill.
+                                        self.inlineStatus(cfg.statusSel, 'Cancelling background job...');
+                                        Bcsend.ajax('bcsend_ai_job_cancel', { job: token }, function(cancelResponse) {
+                                            if (cancelResponse && cancelResponse.success) {
+                                                self.stopAiJob(token);
+                                                self.runAiForeground(type, state.data);
+                                                return;
+                                            }
+                                            // Too late to cancel - the request was
+                                            // already sent. Keep watching it.
+                                            state.paused = false;
+                                            self.inlineStatus(cfg.statusSel, 'The background job already started and could not be cancelled - still waiting for it.', 'warning');
+                                        });
+                                    }
+                                },
+                                {
+                                    label: 'Keep waiting',
+                                    run: function() {
+                                        state.paused = false;
+                                    }
+                                }
+                            ]
+                        );
+                    }
+
+                    schedulePoll();
+                });
+            };
+
+            self.inlineStatus(cfg.statusSel, label());
+            schedulePoll();
+        },
+
+        stopAiJob: function(token) {
+            var state = this.aiJobs[token];
+            if (!state) { return; }
+            if (state.timerId) { window.clearInterval(state.timerId); }
+            if (state.pollId) { window.clearTimeout(state.pollId); }
+            delete this.aiJobs[token];
+        },
+
+        // Hand a finished job's result to the composer - immediately when the
+        // form is untouched, or behind an explicit "Apply result" action when
+        // the user edited the campaign while generation ran (or the result was
+        // recovered from a previous session). Delivered jobs are dismissed
+        // server-side so they are never offered twice.
+        deliverAiJobResult: function(token, type, cfg, state, d) {
+            var self = this;
+            var result = d.result || {};
+            var suffix = d.fallback_used ? ' (a fallback model completed this request).' : '';
+            var dismiss = function() {
+                Bcsend.ajax('bcsend_ai_job_dismiss', { job: token }, function() {});
+            };
+
+            if (!state.reviewOnly && state.dirtyAt === this.dirtyCounter) {
+                cfg.apply(result);
+                dismiss();
+                if (d.fallback_used) {
+                    this.inlineStatus(cfg.statusSel, cfg.doneLabel + suffix, 'success');
+                }
+                return;
+            }
+
+            var message = state.reviewOnly
+                ? 'A generation finished while this campaign was closed.' + suffix
+                : 'Generation finished, but it used an earlier version of this campaign - you have edited it since.' + suffix;
+
+            this.aiJobStatusActions(
+                cfg.statusSel,
+                message,
+                'warning',
+                [
+                    {
+                        label: 'Apply result',
+                        run: function() {
+                            cfg.apply(result);
+                            dismiss();
+                        }
+                    },
+                    {
+                        label: 'Discard',
+                        run: function() {
+                            self.inlineStatus(cfg.statusSel, '');
+                            dismiss();
+                        }
+                    }
+                ]
+            );
+        },
+
+        // Explicit foreground fallback: the legacy synchronous endpoint,
+        // chosen by the user when background execution is unavailable.
+        runAiForeground: function(type, data) {
+            var self = this;
+            var cfg = this.aiJobTypeConfig(type);
+            var $btn = $(cfg.buttonSel);
+
+            Bcsend.loading($btn, true);
+            this.inlineStatus(cfg.statusSel, 'Generating in foreground - keep this tab open...');
+
+            Bcsend.ajax(cfg.legacyAction, $.extend({}, data, { campaign_id: this.campaignId || '' }), function(response) {
+                Bcsend.loading($btn, false);
+
+                if (response.success && response.data) {
+                    cfg.apply(response.data);
+                } else {
+                    var msg = (response.data && response.data.message) ? response.data.message : 'Generation failed.';
+                    self.inlineStatus(cfg.statusSel, msg, 'error');
+                }
+            });
+        },
+
+        // Re-attach to jobs that were running before a reload or tab close.
+        resumeAiJobs: function() {
+            var self = this;
+
+            Bcsend.ajax('bcsend_ai_job_resume', { campaign_id: this.campaignId || 0 }, function(response) {
+                if (!response.success || !response.data || !response.data.jobs) { return; }
+
+                $.each(response.data.jobs, function(_, job) {
+                    var cfg = self.aiJobTypeConfig(job.job_type);
+                    if (!cfg) { return; }
+
+                    if ('uncertain' === job.status) {
+                        self.inlineStatus(cfg.statusSel, 'A previous generation lost contact with its background worker and was not retried automatically. You can generate again.', 'warning');
+                        return;
+                    }
+
+                    // Completed while no composer was open: recover the paid
+                    // result as an explicit review-and-apply offer.
+                    self.watchAiJob(job.job, job.job_type, {
+                        elapsed: job.elapsed || 0,
+                        reviewOnly: 'completed' === job.status
+                    });
+                });
+            });
+        },
+
+        /* ============================================================
+           Apply Generation Results (shared by background + foreground)
+           ============================================================ */
+
+        applyCampaignResult: function(data) {
+            var generated = {};
+            if (data.content) {
+                try {
+                    generated = JSON.parse(data.content);
+                } catch (e) {
+                    generated = { plain_text: data.content };
+                }
+            } else {
+                generated = data;
+            }
+
+            this.populateFields(generated);
+
+            if ($('#bcsend-send-social').is(':checked') && this.getSelectedSocialPlatforms().length && (!generated.social || !Object.keys(generated.social).length)) {
+                this.setGenerateStatus('Campaign content generated, but no social copy came back for the selected accounts.', 'warning');
+            } else {
+                this.setGenerateStatus('Campaign content generated.', 'success');
+            }
+
+            this.autoSaveDraft();
+        },
+
+        applyHtmlResult: function(data) {
+            if (!data.html_content) {
+                this.inlineStatus('#bcsend-regen-html-status', 'Regeneration returned no HTML.', 'error');
+                return;
+            }
+            $('#bcsend-html-editor').val(data.html_content);
+            this.updateEmailPreview(data.html_content);
+            this.htmlSynced = true;
+            this.updateSyncIndicator();
+            this.inlineStatus('#bcsend-regen-html-status', 'HTML regenerated.', 'success');
+        },
+
+        applyPushResult: function(data) {
+            if (data.push_title) {
+                $('#bcsend-push-title').val(data.push_title).trigger('input');
+            }
+            if (data.push_message) {
+                $('#bcsend-push-message').val(data.push_message).trigger('input');
+            }
+            this.inlineStatus('#bcsend-regen-push-status', 'Push content regenerated.', 'success');
+        },
+
+        applySocialResult: function(data) {
+            var self = this;
+
+            if (!data.social || !Object.keys(data.social).length) {
+                this.inlineStatus('#bcsend-regen-social-status', 'Social regeneration returned no platform copy. Confirm an account is selected and the prompt has enough context.', 'warning');
+                return;
+            }
+
+            if (this.isSingleSocialMode()) {
+                var firstPayload = null;
+                $.each(data.social, function(_, entry) {
+                    if (!firstPayload) {
+                        firstPayload = self.normalizeSocialPayload(entry);
+                    }
+                });
+                if (firstPayload) {
+                    $('#bcsend-social-content-shared').val(firstPayload.content || '').trigger('input');
+                    $('#bcsend-social-link-mode-shared').val(firstPayload.link_mode || 'none').trigger('change');
+                    if (firstPayload.link_mode === 'custom') {
+                        $('#bcsend-social-link-url-shared').val(firstPayload.link_url || '').trigger('input');
+                    }
+                    var sharedSuggestedMedia = self.resolveSuggestedMediaItems(firstPayload);
+                    if (sharedSuggestedMedia.length) {
+                        self.setPlatformMedia('shared', sharedSuggestedMedia);
+                    }
+                }
+            } else {
+                $.each(data.social, function(platform, entry) {
+                    var payload = self.normalizeSocialPayload(entry);
+                    $('#bcsend-social-content-' + platform).val(payload.content || '').trigger('input');
+                    $('#bcsend-social-link-mode-' + platform).val(payload.link_mode || 'none').trigger('change');
+                    if (payload.link_mode === 'custom') {
+                        $('#bcsend-social-link-url-' + platform).val(payload.link_url || '').trigger('input');
+                    }
+                    var suggestedMedia = self.resolveSuggestedMediaItems(payload);
+                    if (suggestedMedia.length) {
+                        self.setPlatformMedia(platform, suggestedMedia);
+                    }
+                });
+            }
+
+            this.inlineStatus('#bcsend-regen-social-status', 'Social copy regenerated.', 'success');
+        },
+
+        /* ============================================================
+           Inline Status (messages shown next to the triggering button)
+           ============================================================ */
+
+        inlineStatus: function(selector, message, type) {
+            var $s = $(selector);
+            if (!$s.length) {
+                return;
+            }
+            $s.stop(true, true).clearQueue();
+            $s.removeClass('is-error is-success is-warning');
+            $s.text(message || '');
+            if (type) {
+                $s.addClass('is-' + type);
+            }
+            if ('success' === type) {
+                $s.delay(4000).queue(function(next) {
+                    $(this).text('').removeClass('is-success');
+                    next();
+                });
+            }
+        },
+
+        setSaveStatus: function(message, type) {
+            this.inlineStatus('#bcsend-save-status', message, type);
+        },
+
+        setGenerateStatus: function(message, type) {
+            this.inlineStatus('#bcsend-generate-status', message, type);
+        },
+
+        /* ============================================================
            Validation
            ============================================================ */
 
@@ -1319,7 +1778,7 @@
 
             if (sendSocial) {
                 if (!this.getSelectedSocialPlatforms().length) {
-                    errors.push('Select at least one social platform.');
+                    errors.push('Choose at least one social account in the Social section (or uncheck Include Social Posts).');
                 }
 
                 if (this.isSingleSocialMode()) {
@@ -1357,9 +1816,10 @@
             if (!$('#bcsend-schedule-date').val() || !$('#bcsend-schedule-time').val()) { errors.push('Please set a schedule date and time.'); }
 
             if (errors.length) {
-                Bcsend.notify(errors.join(' '), 'error');
+                this.setSaveStatus(errors.join(' '), 'error');
                 return false;
             }
+            this.setSaveStatus('');
             return true;
         },
 
@@ -1459,20 +1919,20 @@
                 var $btn = $(this);
                 var data = self.collectData();
                 Bcsend.loading($btn, true);
-                $('#bcsend-save-status').text('Saving...');
+                self.setSaveStatus('Saving...');
 
                 Bcsend.ajax('bcsend_save_draft', data, function(response) {
                     Bcsend.loading($btn, false);
-                    $('#bcsend-save-status').text('');
 
                     if (response.success) {
                         if (response.data.id) { self.campaignId = response.data.id; }
-                        Bcsend.notify(response.data.message || 'Draft saved.', 'success');
                         if (response.data.warnings && response.data.warnings.length) {
-                            Bcsend.notify(response.data.warnings.join(' '), 'warning');
+                            self.setSaveStatus((response.data.message || 'Draft saved.') + ' ' + response.data.warnings.join(' '), 'warning');
+                        } else {
+                            self.setSaveStatus(response.data.message || 'Draft saved.', 'success');
                         }
                     } else {
-                        Bcsend.notify((response.data && response.data.message) || 'Failed to save draft.', 'error');
+                        self.setSaveStatus((response.data && response.data.message) || 'Failed to save draft.', 'error');
                     }
                 });
             });
@@ -1538,17 +1998,18 @@
 
                 var data = self.collectData();
                 Bcsend.loading($btn, true);
+                self.setSaveStatus('Scheduling...');
 
                 Bcsend.ajax('bcsend_approve_schedule', data, function(response) {
                     Bcsend.loading($btn, false);
 
                     if (response.success) {
-                        Bcsend.notify(response.data.message || 'Campaign approved and scheduled.', 'success');
+                        self.setSaveStatus(response.data.message || 'Campaign approved and scheduled.', 'success');
                         setTimeout(function() {
                             window.location.href = bcsendAdmin.queueUrl || (window.location.origin + window.location.pathname + '?page=bcsend-queue');
                         }, 1000);
                     } else {
-                        Bcsend.notify((response.data && response.data.message) || 'Failed to approve campaign.', 'error');
+                        self.setSaveStatus((response.data && response.data.message) || 'Failed to approve campaign.', 'error');
                     }
                 });
             });
@@ -1621,7 +2082,7 @@
                     if (data.social_posts && data.social_posts.length) {
                         $.each(data.social_posts, function(_, post) {
                             $('.bcsend-social-platform-enabled[data-platform="' + post.platform + '"]').prop('checked', true).trigger('change');
-                            $('#bcsend-social-account-' + post.platform).val(post.account_id || '');
+                            $('#bcsend-social-account-' + post.platform).val(post.account_id || '').trigger('change');
                             if (self.isSingleSocialMode()) {
                                 if (!$('#bcsend-social-content-shared').val()) {
                                     $('#bcsend-social-content-shared').val(self.normalizeSocialContentInput(self.extractSocialText(post.content || ''))).trigger('input');
@@ -2130,5 +2591,8 @@
     $(document).ready(function() {
         Composer.init();
     });
+
+    // Exposed for debugging and UI test automation.
+    window.BcsendComposer = Composer;
 
 })(jQuery);

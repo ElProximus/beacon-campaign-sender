@@ -18,8 +18,39 @@ class Bcsend_Activator {
 
 	/**
 	 * Activate the plugin.
+	 *
+	 * @param bool $network_wide True when network-activated on multisite.
 	 */
-	public static function activate() {
+	public static function activate( $network_wide = false ) {
+		if ( is_multisite() && $network_wide ) {
+			// Network activation must set up EVERY site, not just the main
+			// one - otherwise the rest of the network runs Beacon with no
+			// tables or capabilities. (The init self-heal would eventually
+			// catch each site lazily; this makes setup explicit and
+			// immediate.)
+			$site_ids = get_sites(
+				array(
+					'fields' => 'ids',
+					'number' => 0,
+				)
+			);
+
+			foreach ( $site_ids as $site_id ) {
+				switch_to_blog( (int) $site_id );
+				self::activate_single_site();
+				restore_current_blog();
+			}
+
+			return;
+		}
+
+		self::activate_single_site();
+	}
+
+	/**
+	 * Run the per-site activation setup for the current site.
+	 */
+	public static function activate_single_site() {
 		self::create_tables();
 		self::set_default_options();
 		self::migrate_settings();
@@ -273,6 +304,63 @@ class Bcsend_Activator {
 			KEY idx_submitted (submitted_at)
 		) $charset_collate;";
 
+		// -----------------------------------------------------------------
+		// AI generation jobs table (durable background job ledger).
+		// -----------------------------------------------------------------
+		$table_ai_jobs = $wpdb->prefix . 'bcsend_ai_jobs';
+		$sql_ai_jobs   = "CREATE TABLE $table_ai_jobs (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			public_token varchar(64) NOT NULL,
+			runner_token varchar(64) NOT NULL,
+			campaign_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			job_type varchar(20) NOT NULL,
+			provider varchar(20) NOT NULL DEFAULT '',
+			requested_model varchar(100) NOT NULL DEFAULT '',
+			effective_model varchar(100) NOT NULL DEFAULT '',
+			status varchar(20) NOT NULL DEFAULT 'queued',
+			input_json longtext DEFAULT NULL,
+			input_hash varchar(64) NOT NULL DEFAULT '',
+			result_json longtext DEFAULT NULL,
+			provider_job_id varchar(191) NOT NULL DEFAULT '',
+			provider_request_id varchar(191) NOT NULL DEFAULT '',
+			lock_token varchar(64) NOT NULL DEFAULT '',
+			lease_expires_at datetime DEFAULT NULL,
+			heartbeat_at datetime DEFAULT NULL,
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			started_at datetime DEFAULT NULL,
+			completed_at datetime DEFAULT NULL,
+			error_code varchar(64) NOT NULL DEFAULT '',
+			error_message text DEFAULT NULL,
+			fallback_used tinyint(1) unsigned NOT NULL DEFAULT 0,
+			PRIMARY KEY  (id),
+			UNIQUE KEY idx_public_token (public_token),
+			KEY idx_campaign (campaign_id),
+			KEY idx_user (user_id),
+			KEY idx_status (status),
+			KEY idx_created (created_at)
+		) $charset_collate;";
+
+		// -----------------------------------------------------------------
+		// Push device registry (Beacon's own tokens: web push, custom apps,
+		// imports; BuddyBoss's table remains a read-only fallback source).
+		// -----------------------------------------------------------------
+		$table_devices = $wpdb->prefix . 'bcsend_user_devices';
+		$sql_devices   = "CREATE TABLE $table_devices (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			token text NOT NULL,
+			token_hash char(64) NOT NULL,
+			platform varchar(20) NOT NULL DEFAULT 'app',
+			status varchar(20) NOT NULL DEFAULT 'active',
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			last_seen_at datetime DEFAULT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY idx_token_hash (token_hash),
+			KEY idx_user (user_id),
+			KEY idx_status_platform (status, platform)
+		) $charset_collate;";
+
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql_campaigns );
 		dbDelta( $sql_segments );
@@ -284,8 +372,10 @@ class Bcsend_Activator {
 		dbDelta( $sql_email_log );
 		dbDelta( $sql_social );
 		dbDelta( $sql_subscribers );
+		dbDelta( $sql_ai_jobs );
+		dbDelta( $sql_devices );
 
-		update_option( 'bcsend_db_version', BCSEND_VERSION );
+		update_option( 'bcsend_db_version', BCSEND_DB_VERSION );
 	}
 
 	/**
@@ -295,10 +385,10 @@ class Bcsend_Activator {
 		$defaults = array(
 			'brevo_api_key'                 => '',
 			'anthropic_api_key'             => '',
-			'anthropic_model'               => 'claude-sonnet-4-6',
+			'anthropic_model'               => Bcsend_Model_Catalog::default_model( 'anthropic' ),
 			'ai_provider'                   => 'anthropic',
 			'openai_api_key'                => '',
-			'openai_model'                  => 'gpt-5.4',
+			'openai_model'                  => Bcsend_Model_Catalog::default_model( 'openai' ),
 			'brevo_sender_name'             => get_bloginfo( 'name' ),
 			'brevo_sender_email'            => get_option( 'admin_email' ),
 			'push_mode'                     => 'auto',
@@ -310,7 +400,7 @@ class Bcsend_Activator {
 			'zernio_post_mode'              => 'single',
 			'log_retention_days'            => 30,
 			'email_log_detail_level'        => 'minimal',
-			'default_subscriber_lists'      => array( 14 ),
+			'default_subscriber_lists'      => array(),
 		);
 
 		if ( ! get_option( 'bcsend_settings' ) ) {
@@ -329,14 +419,14 @@ class Bcsend_Activator {
 		$defaults = array(
 			'ai_provider'              => 'anthropic',
 			'openai_api_key'           => '',
-			'openai_model'             => 'gpt-5.4',
+			'openai_model'             => Bcsend_Model_Catalog::default_model( 'openai' ),
 			'zernio_api_key'           => '',
 			'zernio_profile_id'        => '',
 			'zernio_webhook_secret'    => '',
 			'zernio_webhook_enabled'   => 0,
 			'zernio_post_mode'         => 'single',
 			'email_log_detail_level'   => 'minimal',
-			'default_subscriber_lists' => array( 14 ),
+			'default_subscriber_lists' => array(),
 		);
 
 		foreach ( $defaults as $key => $value ) {
@@ -460,6 +550,54 @@ class Bcsend_Activator {
 
 		$social_post_mode_col = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$table} LIKE %s", 'social_post_mode' ) );
 		if ( empty( $social_post_mode_col ) ) {
+			self::create_tables();
+		}
+
+		// v1.0.6: the Base Template setting became the default template on the
+		// Templates screen. Migrate an existing base template into a real
+		// template once, and make sure a default template is chosen.
+		if ( ! get_option( 'bcsend_default_template_id' ) ) {
+			$templates_table = $wpdb->prefix . 'bcsend_templates';
+			$settings_row    = get_option( 'bcsend_settings', array() );
+			$base_html       = isset( $settings_row['base_template'] ) ? trim( (string) $settings_row['base_template'] ) : '';
+
+			if ( '' !== $base_html ) {
+				$wpdb->insert(
+					$templates_table,
+					array(
+						'name'         => __( 'Starter Template (migrated from Base Template)', 'beacon-campaign-sender' ),
+						'html_content' => $base_html,
+						'plain_text'   => '',
+						'thumbnail'    => '',
+					),
+					array( '%s', '%s', '%s', '%s' )
+				);
+				if ( $wpdb->insert_id ) {
+					update_option( 'bcsend_default_template_id', (int) $wpdb->insert_id );
+					unset( $settings_row['base_template'] );
+					update_option( 'bcsend_settings', $settings_row );
+				}
+			} else {
+				$newest = (int) $wpdb->get_var( "SELECT id FROM {$templates_table} ORDER BY created_at DESC, id DESC LIMIT 1" );
+				if ( $newest ) {
+					update_option( 'bcsend_default_template_id', $newest );
+				}
+			}
+		}
+
+		// v1.0.6: push device registry table.
+		$devices_table  = $wpdb->prefix . 'bcsend_user_devices';
+		$devices_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $devices_table ) );
+
+		if ( empty( $devices_exists ) ) {
+			self::create_tables();
+		}
+
+		// v1.0.6: AI background jobs table.
+		$ai_jobs_table  = $wpdb->prefix . 'bcsend_ai_jobs';
+		$ai_jobs_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $ai_jobs_table ) );
+
+		if ( empty( $ai_jobs_exists ) ) {
 			self::create_tables();
 		}
 

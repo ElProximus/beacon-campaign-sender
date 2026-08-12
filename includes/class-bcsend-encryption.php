@@ -47,8 +47,20 @@ class Bcsend_Encryption {
 	 * @return string 32-byte binary encryption key.
 	 */
 	private static function get_key() {
-		$salt = defined( 'AUTH_KEY' ) && AUTH_KEY ? AUTH_KEY : 'bcsend-default-key-change-me';
-		return hash( 'sha256', $salt, true );
+		if ( defined( 'AUTH_KEY' ) && AUTH_KEY ) {
+			return hash( 'sha256', AUTH_KEY, true );
+		}
+
+		// Standard WordPress always defines AUTH_KEY; without it this
+		// fallback key is public knowledge (it is in the plugin source), so
+		// "encryption" is obfuscation only. Kept for backward compatibility
+		// with values already stored under it - but say so, once a day.
+		if ( class_exists( 'Bcsend_Logger' ) && false === get_transient( 'bcsend_enc_fallback_warned' ) ) {
+			set_transient( 'bcsend_enc_fallback_warned', 1, DAY_IN_SECONDS );
+			Bcsend_Logger::log( 'settings', 'AUTH_KEY is not defined; stored secrets are encrypted with a publicly known fallback key. Define AUTH_KEY in wp-config.php and re-save the API keys.', '', 'error' );
+		}
+
+		return hash( 'sha256', 'bcsend-default-key-change-me', true );
 	}
 
 	/**
@@ -85,8 +97,15 @@ class Bcsend_Encryption {
 	/**
 	 * Decrypt a value.
 	 *
+	 * Legacy plaintext values (no encryption prefix) pass through untouched.
+	 * A prefixed value that cannot be decrypted returns an EMPTY string, not
+	 * the ciphertext: returning the blob made the plugin send
+	 * "$bcsend_enc$..." to providers as the API key (baffling 401s, blob
+	 * shown in the settings field), while an empty value flows into the
+	 * existing honest "API key not configured" handling.
+	 *
 	 * @param string $value The encrypted value to decrypt.
-	 * @return string The decrypted plaintext, or original if decryption fails.
+	 * @return string The decrypted plaintext, '' if decryption fails.
 	 */
 	public static function decrypt( $value ) {
 		if ( empty( $value ) ) {
@@ -103,7 +122,7 @@ class Bcsend_Encryption {
 		$data = base64_decode( $data );
 
 		if ( false === $data ) {
-			return $value;
+			return self::fail_decrypt();
 		}
 
 		$key       = self::get_key();
@@ -116,10 +135,24 @@ class Bcsend_Encryption {
 		$decrypted = openssl_decrypt( $encrypted, self::METHOD, $key, 0, $iv );
 
 		if ( false === $decrypted ) {
-			return $value;
+			return self::fail_decrypt();
 		}
 
 		return $decrypted;
+	}
+
+	/**
+	 * Report a decryption failure and return the empty replacement value.
+	 *
+	 * @return string Always ''.
+	 */
+	private static function fail_decrypt() {
+		if ( class_exists( 'Bcsend_Logger' ) && false === get_transient( 'bcsend_enc_decrypt_warned' ) ) {
+			set_transient( 'bcsend_enc_decrypt_warned', 1, HOUR_IN_SECONDS );
+			Bcsend_Logger::log( 'settings', 'A stored secret could not be decrypted - AUTH_KEY may have changed (host migration, key rotation). Re-enter the affected API keys in Beacon Settings.', '', 'error' );
+		}
+
+		return '';
 	}
 
 	/**

@@ -246,19 +246,19 @@ class Bcsend_Subscriber_Ingest {
 	 */
 	private static function get_default_list_ids() {
 		$settings = get_option( 'bcsend_settings', array() );
-		$list_ids = isset( $settings['default_subscriber_lists'] ) ? $settings['default_subscriber_lists'] : array( 14 );
+		$list_ids = isset( $settings['default_subscriber_lists'] ) ? $settings['default_subscriber_lists'] : array();
 
 		if ( is_string( $list_ids ) ) {
 			$list_ids = preg_split( '/\s*,\s*/', trim( $list_ids ) );
 		}
 
 		if ( ! is_array( $list_ids ) ) {
-			return array( 14 );
+			return array();
 		}
 
 		$list_ids = array_values( array_unique( array_filter( array_map( 'intval', $list_ids ) ) ) );
 
-		return ! empty( $list_ids ) ? $list_ids : array( 14 );
+		return ! empty( $list_ids ) ? $list_ids : array();
 	}
 
 	/**

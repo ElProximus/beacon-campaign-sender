@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Beacon Campaign Sender
  * Description: Email and push notification campaign manager with AI content generation, Brevo integration, and Firebase push delivery.
- * Version: 1.0.5
+ * Version: 1.1.0
  * Author: Joe Campbell
  * Author URI: https://aisystemadmin.com/joe-campbell/
  * License: GPL v2 or later
@@ -20,7 +20,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants.
-define( 'BCSEND_VERSION', '1.0.5' );
+define( 'BCSEND_VERSION', '1.1.0' );
+// Schema/self-heal generation, independent of the display version (which
+// only changes at release time). Bump when tables, capabilities, or stored
+// settings need a one-time upgrade pass; the pass runs once per site, not
+// on every request.
+define( 'BCSEND_DB_VERSION', '2' );
 define( 'BCSEND_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BCSEND_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'BCSEND_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
@@ -32,6 +37,27 @@ require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-deactivator.php';
 
 register_activation_hook( __FILE__, array( 'Bcsend_Activator', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'Bcsend_Deactivator', 'deactivate' ) );
+
+// A site created on a network where Beacon is network-active gets its own
+// tables and capabilities immediately (the init self-heal would also catch
+// it lazily on first visit; this makes setup explicit).
+add_action(
+	'wp_initialize_site',
+	static function ( $new_site ) {
+		if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		if ( ! is_plugin_active_for_network( BCSEND_PLUGIN_BASENAME ) ) {
+			return;
+		}
+
+		switch_to_blog( (int) $new_site->blog_id );
+		Bcsend_Activator::activate_single_site();
+		restore_current_blog();
+	},
+	900
+);
 
 // Declare HPOS (High-Performance Order Storage) compatibility.
 add_action(
@@ -135,6 +161,36 @@ function bcsend_sanitize_json_string( $raw, $default = '{}', $mode = 'text' ) {
 }
 
 /**
+ * Sanitize a push target_data JSON string.
+ *
+ * Role slugs and user IDs get identifier ('key') cleaning, but the Firebase
+ * topic name must NOT: topics are case-sensitive and may legally contain
+ * . ~ % - characters sanitize_key strips - "News" would silently become
+ * "news" and be sent, successfully, to a topic with zero subscribers. The
+ * topic keeps text-preserving cleaning here; send_to_topic() enforces the
+ * strict topic format before any send.
+ *
+ * @param string $raw Raw (unslashed) target_data JSON.
+ * @return string Sanitized JSON string.
+ */
+function bcsend_sanitize_push_target_data( $raw ) {
+	$sanitized_json = bcsend_sanitize_json_string( $raw, '[]', 'key' );
+
+	$raw_decoded = json_decode( (string) $raw, true );
+
+	if ( is_array( $raw_decoded ) && isset( $raw_decoded['topic'] ) && is_string( $raw_decoded['topic'] ) ) {
+		$decoded = json_decode( $sanitized_json, true );
+
+		if ( is_array( $decoded ) ) {
+			$decoded['topic'] = sanitize_text_field( $raw_decoded['topic'] );
+			$sanitized_json   = wp_json_encode( $decoded );
+		}
+	}
+
+	return $sanitized_json;
+}
+
+/**
  * Resolve the campaign Reply-To using campaign override, settings default, then sender fallback.
  *
  * Empty return values are intentional: Brevo campaign creation falls back to
@@ -219,10 +275,16 @@ final class Bcsend_Plugin {
 		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-zernio-api.php';
 		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-social-workflow.php';
 		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-ajax-campaigns.php';
+		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-ai-jobs.php';
+		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-ai-job-runner.php';
+		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-ajax-ai-jobs.php';
 		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-email-log.php';
+		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-model-catalog.php';
 		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-anthropic-api.php';
 		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-openai-api.php';
 		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-ai-service.php';
+		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-devices.php';
+		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-web-push.php';
 		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-push-service.php';
 		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-segment-engine.php';
 		require_once BCSEND_PLUGIN_DIR . 'includes/class-bcsend-campaign-sender.php';
@@ -259,6 +321,8 @@ final class Bcsend_Plugin {
 		$this->register_privacy_hooks();
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
 		Bcsend_Subscribe_Endpoint::init();
+		Bcsend_Devices::init();
+		Bcsend_Web_Push::init();
 		add_filter( 'cron_schedules', array( $this, 'add_cron_schedules' ) );
 
 		// Initialize admin.
@@ -273,6 +337,14 @@ final class Bcsend_Plugin {
 		$campaign_ajax = new Bcsend_Ajax_Campaigns();
 		$campaign_ajax->register();
 
+		// Background AI generation jobs (runner must register outside is_admin —
+		// the cron/Action Scheduler backstop and loopback kicks run frontend context).
+		$ai_job_runner = new Bcsend_Ai_Job_Runner();
+		$ai_job_runner->register();
+
+		$ai_job_ajax = new Bcsend_Ajax_Ai_Jobs();
+		$ai_job_ajax->register();
+
 		// Initialize SMTP routing (must run outside is_admin — wp_mail fires everywhere).
 		$smtp = new Bcsend_Smtp();
 		$smtp->init();
@@ -283,7 +355,10 @@ final class Bcsend_Plugin {
 		add_action( 'init', array( $this, 'maybe_schedule_recurring_jobs' ) );
 
 		// Run settings migration on admin_init (handles upgrades without reactivation).
-		add_action( 'admin_init', array( $this, 'maybe_migrate_settings' ) );
+		// Schema upgrades run on init (not admin_init) so a non-admin
+		// campaign operator reaching the composer right after a plugin update
+		// never hits a missing table.
+		add_action( 'init', array( $this, 'maybe_migrate_settings' ) );
 
 		// --- AJAX: Connection testing ---
 		add_action( 'wp_ajax_bcsend_test_brevo', array( $this, 'ajax_test_brevo' ) );
@@ -329,13 +404,13 @@ final class Bcsend_Plugin {
 		add_action( 'wp_ajax_bcsend_save_template', array( $this, 'ajax_save_template' ) );
 		add_action( 'wp_ajax_bcsend_delete_template', array( $this, 'ajax_delete_template' ) );
 		add_action( 'wp_ajax_bcsend_duplicate_template', array( $this, 'ajax_duplicate_template' ) );
+		add_action( 'wp_ajax_bcsend_set_default_template', array( $this, 'ajax_set_default_template' ) );
 
 		// --- AJAX: Dashboard & Analytics ---
 		add_action( 'wp_ajax_bcsend_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
 		add_action( 'wp_ajax_bcsend_get_analytics_data', array( $this, 'ajax_get_analytics_data' ) );
 
 		// --- AJAX: Settings helpers ---
-		add_action( 'wp_ajax_bcsend_get_default_template', array( $this, 'ajax_get_default_template' ) );
 		add_action( 'wp_ajax_bcsend_zernio_fetch_profiles', array( $this, 'ajax_zernio_fetch_profiles' ) );
 		add_action( 'wp_ajax_bcsend_zernio_set_profile', array( $this, 'ajax_zernio_set_profile' ) );
 		add_action( 'wp_ajax_bcsend_zernio_sync_accounts', array( $this, 'ajax_zernio_sync_accounts' ) );
@@ -455,19 +530,23 @@ final class Bcsend_Plugin {
 	 * @since 1.1.0
 	 */
 	public function maybe_migrate_settings() {
+		// One autoloaded option read per request; the ~20-query schema/
+		// capability/settings self-heal below runs only once per schema
+		// generation (fresh install, plugin files updated in place), never
+		// on every page view.
+		if ( BCSEND_DB_VERSION === get_option( 'bcsend_db_version' ) ) {
+			return;
+		}
+
 		Bcsend_Activator::maybe_upgrade_schema_public();
 		self::sanitize_zernio_webhook_diagnostics();
 
 		// Self-heal capabilities if they're missing (e.g. plugin uploaded while active).
 		Bcsend_Activator::register_capabilities_public();
 
-		$settings = get_option( 'bcsend_settings', array() );
-		if ( isset( $settings['push_source'] ) || isset( $settings['push_method'] ) ) {
-			Bcsend_Activator::migrate_settings_public();
-			return;
-		}
-
 		Bcsend_Activator::migrate_settings_public();
+
+		update_option( 'bcsend_db_version', BCSEND_DB_VERSION );
 	}
 
 	// =========================================================================
@@ -856,9 +935,32 @@ final class Bcsend_Plugin {
 			Bcsend_Logger::log( 'push', 'Test push sent to user ' . $user_id . ' via BuddyBoss.' );
 			wp_send_json_success( array( 'message' => __( 'Test push notification sent via BuddyBoss.', 'beacon-campaign-sender' ) ) );
 		} else {
-			// Manual Firebase — placeholder for service class delegation.
-			Bcsend_Logger::log( 'push', 'Test push requested via Firebase for user ' . $user_id . '. Firebase direct send not yet implemented.', '', 'info' );
-			wp_send_json_error( array( 'message' => __( 'Direct Firebase push send will be handled by the push service class.', 'beacon-campaign-sender' ) ) );
+			// Manual Firebase: send directly through Beacon's own FCM engine
+			// to every device registered for this user (web push or app).
+			$service = new Bcsend_Push_Service();
+
+			if ( ! $service->is_configured() ) {
+				wp_send_json_error( array( 'message' => __( 'Firebase is not configured. Paste your service account JSON and project ID in Settings > Push.', 'beacon-campaign-sender' ) ) );
+			}
+
+			$result = $service->send_test_to_user( $user_id, $title, $message );
+
+			if ( is_wp_error( $result ) ) {
+				Bcsend_Logger::log( 'push', 'Test push failed (Firebase direct): ' . $result->get_error_message(), '', 'error' );
+				wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+			}
+
+			Bcsend_Logger::log( 'push', sprintf( 'Test push sent to user %d via Firebase direct (%d sent, %d failed).', $user_id, $result['sent'], $result['failed'] ) );
+			wp_send_json_success(
+				array(
+					'message' => sprintf(
+						/* translators: 1: sent count, 2: device count. */
+						__( 'Test push sent to %1$d of %2$d registered devices.', 'beacon-campaign-sender' ),
+						$result['sent'],
+						$result['total']
+					),
+				)
+			);
 		}
 	}
 
@@ -1613,27 +1715,6 @@ final class Bcsend_Plugin {
 		);
 	}
 
-	/**
-	 * AJAX: Get the default email template.
-	 */
-	public function ajax_get_default_template() {
-		check_ajax_referer( 'bcsend_nonce', 'nonce' );
-
-		if ( ! current_user_can( 'manage_bcsend' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'beacon-campaign-sender' ) ) );
-		}
-
-		$template_path = BCSEND_PLUGIN_DIR . 'templates/default-email.html';
-		$template      = '';
-
-		if ( file_exists( $template_path ) ) {
-			$template = file_get_contents( $template_path );
-			$template = str_replace( '{{COMPANY_NAME}}', get_bloginfo( 'name' ), $template );
-		}
-
-		wp_send_json_success( array( 'template' => $template ) );
-	}
-
 	// =========================================================================
 	// Standalone Push Notifications
 	// =========================================================================
@@ -1654,7 +1735,7 @@ final class Bcsend_Plugin {
 				'message'      => isset( $_POST['message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['message'] ) ) : '',
 				'link_url'     => isset( $_POST['link_url'] ) ? esc_url_raw( wp_unslash( $_POST['link_url'] ) ) : '',
 				'target_type'  => isset( $_POST['target_type'] ) ? sanitize_key( wp_unslash( $_POST['target_type'] ) ) : 'all_users',
-				'target_data'  => isset( $_POST['target_data'] ) ? bcsend_sanitize_json_string( wp_unslash( $_POST['target_data'] ), '[]', 'key' ) : null,
+				'target_data'  => isset( $_POST['target_data'] ) ? bcsend_sanitize_push_target_data( wp_unslash( $_POST['target_data'] ) ) : null,
 				'is_scheduled' => ! empty( $_POST['is_scheduled'] ),
 				'scheduled_at' => isset( $_POST['scheduled_at'] ) ? sanitize_text_field( wp_unslash( $_POST['scheduled_at'] ) ) : '',
 				'tz_offset'    => isset( $_POST['tz_offset'] ) ? (int) $_POST['tz_offset'] : null,
@@ -2159,6 +2240,28 @@ final class Bcsend_Plugin {
 	}
 
 	/**
+	 * Record webhook diagnostics for a request that failed authentication.
+	 *
+	 * These writes happen before any signature proof, so anonymous traffic
+	 * could otherwise force a database write per request and bury the last
+	 * legitimate diagnostics entry under rejection spam. The first rejection
+	 * in any five-minute window is recorded (that is the one an admin needs
+	 * for debugging - e.g. "webhook secret is wrong"); the rest are dropped.
+	 * Verified webhooks always record, unthrottled.
+	 *
+	 * @param array $entry Diagnostics entry to store.
+	 * @return void
+	 */
+	private static function record_rejected_webhook_diagnostics( $entry ) {
+		if ( false !== get_transient( 'bcsend_zernio_rejection_recorded' ) ) {
+			return;
+		}
+
+		set_transient( 'bcsend_zernio_rejection_recorded', 1, 5 * MINUTE_IN_SECONDS );
+		update_option( 'bcsend_zernio_webhook_diagnostics', $entry, false );
+	}
+
+	/**
 	 * Handle inbound Zernio webhook events.
 	 *
 	 * @param WP_REST_Request $request REST request.
@@ -2171,8 +2274,7 @@ final class Bcsend_Plugin {
 		$received_at = current_time( 'mysql', true );
 
 		if ( empty( $secret ) ) {
-			update_option(
-				'bcsend_zernio_webhook_diagnostics',
+			self::record_rejected_webhook_diagnostics(
 				array(
 					'last_received_at'      => $received_at,
 					'last_status'           => 'rejected_no_secret',
@@ -2180,8 +2282,7 @@ final class Bcsend_Plugin {
 					'last_signature_header' => '',
 					'last_error'            => 'Webhook secret not configured.',
 					'last_payload'          => self::summarize_zernio_payload_for_storage( $raw_body ),
-				),
-				false
+				)
 			);
 			return new WP_REST_Response( array( 'message' => 'Webhook secret not configured.' ), 403 );
 		}
@@ -2210,8 +2311,7 @@ final class Bcsend_Plugin {
 		}
 
 		if ( empty( $provided_signature ) ) {
-			update_option(
-				'bcsend_zernio_webhook_diagnostics',
+			self::record_rejected_webhook_diagnostics(
 				array(
 					'last_received_at'      => $received_at,
 					'last_status'           => 'rejected_missing_signature',
@@ -2219,8 +2319,7 @@ final class Bcsend_Plugin {
 					'last_signature_header' => '',
 					'last_error'            => 'Missing webhook signature.',
 					'last_payload'          => self::summarize_zernio_payload_for_storage( $raw_body ),
-				),
-				false
+				)
 			);
 			return new WP_REST_Response( array( 'message' => 'Missing webhook signature.' ), 401 );
 		}
@@ -2230,8 +2329,7 @@ final class Bcsend_Plugin {
 
 		if ( ! $valid ) {
 			Bcsend_Logger::log( 'webhook', 'Rejected Zernio webhook signature', array( 'provided_signature' => $provided_signature ), 'error' );
-			update_option(
-				'bcsend_zernio_webhook_diagnostics',
+			self::record_rejected_webhook_diagnostics(
 				array(
 					'last_received_at'      => $received_at,
 					'last_status'           => 'rejected_invalid_signature',
@@ -2239,8 +2337,7 @@ final class Bcsend_Plugin {
 					'last_signature_header' => $provided_signature,
 					'last_error'            => 'Invalid signature.',
 					'last_payload'          => self::summarize_zernio_payload_for_storage( $raw_body ),
-				),
-				false
+				)
 			);
 			return new WP_REST_Response( array( 'message' => 'Invalid signature.' ), 401 );
 		}
@@ -2455,6 +2552,39 @@ final class Bcsend_Plugin {
 	/**
 	 * AJAX: Save a template (create or update).
 	 */
+	/**
+	 * AJAX: mark a template as the default.
+	 *
+	 * The default template is listed first on the Templates screen and is
+	 * preloaded whenever the composer opens without a campaign or an
+	 * explicitly chosen template.
+	 *
+	 * @return void
+	 */
+	public function ajax_set_default_template() {
+		check_ajax_referer( 'bcsend_nonce', 'nonce' );
+
+		// Manager tier: re-pointing the site-wide default template belongs to
+		// the same boundary as the Templates screen, not to delegated
+		// campaign editors. Reading templates and additive save-as-template
+		// deliberately stay at edit_bcsend_campaigns for the composer.
+		if ( ! current_user_can( 'manage_bcsend' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'beacon-campaign-sender' ) ) );
+		}
+
+		global $wpdb;
+		$table       = $wpdb->prefix . 'bcsend_templates';
+		$template_id = isset( $_POST['template_id'] ) ? absint( $_POST['template_id'] ) : 0;
+		$exists      = $template_id ? (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $template_id ) ) : 0;
+
+		if ( ! $exists ) {
+			wp_send_json_error( array( 'message' => __( 'Template not found.', 'beacon-campaign-sender' ) ) );
+		}
+
+		update_option( 'bcsend_default_template_id', $template_id );
+		wp_send_json_success( array( 'default_template_id' => $template_id ) );
+	}
+
 	public function ajax_save_template() {
 		check_ajax_referer( 'bcsend_nonce', 'nonce' );
 
@@ -2521,7 +2651,8 @@ final class Bcsend_Plugin {
 	public function ajax_delete_template() {
 		check_ajax_referer( 'bcsend_nonce', 'nonce' );
 
-		if ( ! current_user_can( 'edit_bcsend_campaigns' ) ) {
+		// Manager tier - destructive, and can retire the default template.
+		if ( ! current_user_can( 'manage_bcsend' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'beacon-campaign-sender' ) ) );
 		}
 
@@ -2540,6 +2671,18 @@ final class Bcsend_Plugin {
 			wp_send_json_error( array( 'message' => __( 'Failed to delete template.', 'beacon-campaign-sender' ) ) );
 		}
 
+		// Never leave the default pointing at a deleted template: promote the
+		// newest remaining one, or clear the setting when none are left.
+		if ( (int) get_option( 'bcsend_default_template_id', 0 ) === $id ) {
+			$next_default = (int) $wpdb->get_var( "SELECT id FROM {$table} ORDER BY created_at DESC, id DESC LIMIT 1" );
+
+			if ( $next_default ) {
+				update_option( 'bcsend_default_template_id', $next_default );
+			} else {
+				delete_option( 'bcsend_default_template_id' );
+			}
+		}
+
 		Bcsend_Logger::log( 'template', 'Template deleted: ID ' . $id );
 		wp_send_json_success( array( 'message' => __( 'Template deleted.', 'beacon-campaign-sender' ) ) );
 	}
@@ -2550,7 +2693,8 @@ final class Bcsend_Plugin {
 	public function ajax_duplicate_template() {
 		check_ajax_referer( 'bcsend_nonce', 'nonce' );
 
-		if ( ! current_user_can( 'edit_bcsend_campaigns' ) ) {
+		// Manager tier - a Templates-screen action, not a composer one.
+		if ( ! current_user_can( 'manage_bcsend' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'beacon-campaign-sender' ) ) );
 		}
 

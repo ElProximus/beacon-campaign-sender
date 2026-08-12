@@ -46,6 +46,11 @@ class Bcsend_Privacy {
 	 * @return array
 	 */
 	public static function register_exporters( $exporters ) {
+		$exporters['bcsend-devices'] = array(
+			'exporter_friendly_name' => __( 'Beacon Campaign Sender Push Devices', 'beacon-campaign-sender' ),
+			'callback'               => array( __CLASS__, 'export_devices' ),
+		);
+
 		$exporters['beacon-campaign-sender-subscribers'] = array(
 			'exporter_friendly_name' => __( 'Beacon Campaign Sender Subscribers', 'beacon-campaign-sender' ),
 			'callback'               => array( __CLASS__, 'export_subscribers' ),
@@ -66,6 +71,11 @@ class Bcsend_Privacy {
 	 * @return array
 	 */
 	public static function register_erasers( $erasers ) {
+		$erasers['bcsend-devices'] = array(
+			'eraser_friendly_name' => __( 'Beacon Campaign Sender Push Devices', 'beacon-campaign-sender' ),
+			'callback'             => array( __CLASS__, 'erase_devices' ),
+		);
+
 		$erasers['beacon-campaign-sender-subscribers'] = array(
 			'eraser_friendly_name' => __( 'Beacon Campaign Sender Subscribers', 'beacon-campaign-sender' ),
 			'callback'             => array( __CLASS__, 'erase_subscribers' ),
@@ -88,6 +98,8 @@ class Bcsend_Privacy {
 		$content  = '<p>' . esc_html__( 'Beacon Campaign Sender can store subscriber sign-up records, including email address, name, consent text, source, IP address, browser user agent, and referrer metadata to document newsletter sign-ups and delivery attempts.', 'beacon-campaign-sender' ) . '</p>';
 		$content .= '<p>' . esc_html__( 'Beacon Campaign Sender can also store transactional email log records, including recipient addresses, message subject, message body, headers, attachments metadata, sender details, delivery status, and error details to support troubleshooting and resend workflows.', 'beacon-campaign-sender' ) . '</p>';
 		$content .= '<p>' . esc_html__( 'If enabled, Beacon Campaign Sender sends data to external services including Brevo for email delivery and contacts, OpenAI or Anthropic for AI content generation, Firebase for push delivery, and Zernio for social publishing. Review your site privacy policy to disclose which integrations are enabled on your installation.', 'beacon-campaign-sender' ) . '</p>';
+		$content .= '<p>' . esc_html__( 'When AI content generation is used, Beacon Campaign Sender temporarily stores the generation request (including the prompt and selected campaign content) and the generated result in a background job record, retained for up to 30 days and then deleted automatically.', 'beacon-campaign-sender' ) . '</p>';
+		$content .= '<p>' . esc_html__( 'If push notifications are enabled, Beacon Campaign Sender stores a device token for each browser or app that subscribes, along with the device platform, the subscription date, and the WordPress account it belongs to when the subscriber is logged in. Tokens are used only to deliver notifications and are removed when a subscriber unsubscribes or the token stops working.', 'beacon-campaign-sender' ) . '</p>';
 		$content .= '<p>' . esc_html__( 'Beacon Campaign Sender honors WordPress personal data export and erasure requests for subscriber and email log records stored locally by the plugin.', 'beacon-campaign-sender' ) . '</p>';
 
 		wp_add_privacy_policy_content( __( 'Beacon Campaign Sender', 'beacon-campaign-sender' ), wp_kses_post( $content ) );
@@ -343,6 +355,97 @@ class Bcsend_Privacy {
 
 		return array(
 			'items_removed'  => $items_removed,
+			'items_retained' => false,
+			'messages'       => array(),
+			'done'           => true,
+		);
+	}
+
+	/**
+	 * Export push device records linked to a user's email address.
+	 *
+	 * @param string $email_address Email address.
+	 * @param int    $page          Page number.
+	 * @return array
+	 */
+	public static function export_devices( $email_address, $page = 1 ) {
+		$user = get_user_by( 'email', $email_address );
+
+		if ( ! $user ) {
+			return array(
+				'data' => array(),
+				'done' => true,
+			);
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'bcsend_user_devices';
+		$rows  = (array) $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT platform, status, created_at, last_seen_at FROM {$table} WHERE user_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$user->ID
+			)
+		);
+
+		$export = array();
+
+		foreach ( $rows as $index => $row ) {
+			$export[] = array(
+				'group_id'    => 'bcsend-devices',
+				'group_label' => __( 'Push Notification Devices', 'beacon-campaign-sender' ),
+				'item_id'     => 'bcsend-device-' . ( $index + 1 ),
+				'data'        => array(
+					array(
+						'name'  => __( 'Platform', 'beacon-campaign-sender' ),
+						'value' => $row->platform,
+					),
+					array(
+						'name'  => __( 'Status', 'beacon-campaign-sender' ),
+						'value' => $row->status,
+					),
+					array(
+						'name'  => __( 'Subscribed', 'beacon-campaign-sender' ),
+						'value' => $row->created_at,
+					),
+					array(
+						'name'  => __( 'Last seen', 'beacon-campaign-sender' ),
+						'value' => $row->last_seen_at,
+					),
+				),
+			);
+		}
+
+		return array(
+			'data' => $export,
+			'done' => true,
+		);
+	}
+
+	/**
+	 * Erase push device records linked to a user's email address.
+	 *
+	 * @param string $email_address Email address.
+	 * @param int    $page          Page number.
+	 * @return array
+	 */
+	public static function erase_devices( $email_address, $page = 1 ) {
+		$user = get_user_by( 'email', $email_address );
+
+		if ( ! $user ) {
+			return array(
+				'items_removed'  => false,
+				'items_retained' => false,
+				'messages'       => array(),
+				'done'           => true,
+			);
+		}
+
+		global $wpdb;
+		$table   = $wpdb->prefix . 'bcsend_user_devices';
+		$deleted = (int) $wpdb->delete( $table, array( 'user_id' => $user->ID ), array( '%d' ) );
+
+		return array(
+			'items_removed'  => $deleted > 0,
 			'items_retained' => false,
 			'messages'       => array(),
 			'done'           => true,

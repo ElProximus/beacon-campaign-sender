@@ -485,32 +485,10 @@ class Bcsend_Campaign_Sender {
 			$target_data = is_array( $decoded ) ? $decoded : array();
 		}
 
-		$user_ids = Bcsend_Push_Manager::resolve_recipients( $target_type, $target_data );
-
-		if ( empty( $user_ids ) ) {
-			Bcsend_Logger::log(
-				'campaign_send',
-				'Push skipped: No user IDs found for segment.',
-				wp_json_encode(
-					array(
-						'campaign_id' => $campaign_id,
-						'push'        => 'skipped',
-						'reason'      => 'No user IDs found for segment.',
-					)
-				)
-			);
-
-			$wpdb->update(
-				$table,
-				array( 'push_status' => 'skipped' ),
-				array( 'id' => $campaign_id ),
-				array( '%s' ),
-				array( '%d' )
-			);
-			return;
-		}
-
-		$tokens = $push_service->get_tokens_for_users( $user_ids );
+		// Every registered device for this audience: Beacon's own registry
+		// (web push subscribers, imported tokens, custom apps) plus the
+		// BuddyBoss table where present.
+		$tokens = Bcsend_Push_Manager::collect_tokens_for_target( $target_type, $target_data );
 
 		if ( empty( $tokens ) ) {
 			Bcsend_Logger::log(

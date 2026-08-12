@@ -43,10 +43,15 @@ class Bcsend_Templates {
 	private function get_templates() {
 		global $wpdb;
 
-		$table = $wpdb->prefix . 'bcsend_templates';
+		$table      = $wpdb->prefix . 'bcsend_templates';
+		$default_id = (int) get_option( 'bcsend_default_template_id', 0 );
 
+		// The default template is always listed first.
 		return $wpdb->get_results(
-			"SELECT * FROM {$table} ORDER BY created_at DESC"
+			$wpdb->prepare(
+				"SELECT * FROM {$table} ORDER BY ( id = %d ) DESC, created_at DESC",
+				$default_id
+			)
 		);
 	}
 }

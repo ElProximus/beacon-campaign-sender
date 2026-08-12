@@ -96,7 +96,7 @@ class Bcsend_Push_Manager {
 			return new WP_Error( 'message_too_long', 'Message must be 400 characters or fewer.' );
 		}
 
-		$allowed_types = array( 'all_users', 'by_role', 'specific_users' );
+		$allowed_types = array( 'all_users', 'all_subscribers', 'by_role', 'specific_users', 'topic' );
 		if ( ! in_array( $target_type, $allowed_types, true ) ) {
 			return new WP_Error( 'invalid_target_type', 'Invalid target type.' );
 		}
@@ -218,19 +218,37 @@ class Bcsend_Push_Manager {
 		// Update to processing.
 		$wpdb->update( $table, array( 'status' => 'processing' ), array( 'id' => $push_id ), array( '%s' ), array( '%d' ) );
 
-		// Resolve recipient user IDs.
-		$target_data = ! empty( $push->target_data ) ? json_decode( $push->target_data, true ) : array();
-		$user_ids    = self::resolve_recipients( $push->target_type, $target_data );
+		$target_data  = ! empty( $push->target_data ) ? json_decode( $push->target_data, true ) : array();
+		$push_service = new Bcsend_Push_Service();
 
-		if ( empty( $user_ids ) ) {
-			$wpdb->update( $table, array( 'status' => 'failed' ), array( 'id' => $push_id ), array( '%s' ), array( '%d' ) );
-			Bcsend_Logger::log( 'push', sprintf( 'Push %d failed: no recipients found.', $push_id ), '', 'error' );
-			return new WP_Error( 'no_recipients', 'No recipients found for this target.' );
+		// Firebase topic sends need no tokens at all: one FCM call reaches
+		// every device the site owner's app subscribed to that topic.
+		if ( 'topic' === $push->target_type ) {
+			$topic  = isset( $target_data['topic'] ) ? (string) $target_data['topic'] : '';
+			$result = $push_service->send_to_topic( $topic, $push->title, $push->message, $push->link_url );
+
+			if ( is_wp_error( $result ) ) {
+				$wpdb->update( $table, array( 'status' => 'failed' ), array( 'id' => $push_id ), array( '%s' ), array( '%d' ) );
+				Bcsend_Logger::log( 'push', sprintf( 'Push %d topic send failed: %s', $push_id, $result->get_error_message() ), '', 'error' );
+				return $result;
+			}
+
+			$wpdb->update(
+				$table,
+				array(
+					'status'       => 'sent',
+					'total_tokens' => 0,
+					'sent_count'   => 1,
+				),
+				array( 'id' => $push_id ),
+				array( '%s', '%d', '%d' ),
+				array( '%d' )
+			);
+			Bcsend_Logger::log( 'push', sprintf( 'Push %d sent to Firebase topic "%s".', $push_id, $topic ) );
+			return true;
 		}
 
-		// Get device tokens.
-		$push_service = new Bcsend_Push_Service();
-		$tokens       = $push_service->get_tokens_for_users( $user_ids );
+		$tokens = self::collect_tokens_for_target( $push->target_type, $target_data );
 
 		if ( empty( $tokens ) ) {
 			$wpdb->update( $table, array( 'status' => 'failed' ), array( 'id' => $push_id ), array( '%s' ), array( '%d' ) );
@@ -345,7 +363,11 @@ class Bcsend_Push_Manager {
 				$message,
 				$device['user_id'],
 				$link_url,
-				true // return_details
+				true, // return_details
+				// Without the platform, web subscribers get the app-shaped
+				// payload: FCM auto-displays it and the service worker's
+				// data-only rendering (dedup, click handling) never runs.
+				'' !== $device['platform'] ? $device['platform'] : 'app'
 			);
 
 			$success       = is_array( $result ) && 'success' === $result['status'];
@@ -551,7 +573,20 @@ class Bcsend_Push_Manager {
 
 		$deletable = array( 'pending', 'scheduled', 'failed', 'expired', 'cancelled', 'sent' );
 		if ( ! in_array( $push->status, $deletable, true ) ) {
-			return new WP_Error( 'not_deletable', 'Cannot delete a push that is currently sending.' );
+			// A 'processing'/'sending' row is deletable once provably dead
+			// (wedged over an hour past any legitimate start) - otherwise a
+			// mid-send fatal leaves an undeletable zombie in the list.
+			$cutoff       = time() - HOUR_IN_SECONDS;
+			$created_ts   = ! empty( $push->created_at ) ? strtotime( $push->created_at . ' UTC' ) : 0;
+			$scheduled_ts = ! empty( $push->scheduled_at ) ? strtotime( $push->scheduled_at . ' UTC' ) : 0;
+
+			$provably_dead = in_array( $push->status, array( 'processing', 'sending' ), true )
+				&& $created_ts && $created_ts < $cutoff
+				&& ( ! $scheduled_ts || $scheduled_ts < $cutoff );
+
+			if ( ! $provably_dead ) {
+				return new WP_Error( 'not_deletable', 'Cannot delete a push that is currently sending.' );
+			}
 		}
 
 		$wpdb->delete( $wpdb->prefix . self::TABLE_HISTORY, array( 'push_id' => $push_id ), array( '%d' ) );
@@ -621,6 +656,26 @@ class Bcsend_Push_Manager {
 		if ( $expired > 0 ) {
 			Bcsend_Logger::log( 'push', sprintf( '%d overdue push notifications expired.', $expired ) );
 		}
+
+		// Recover pushes wedged mid-send: an inline send that fatals (PHP
+		// time limit during FCM retry backoff) leaves the row 'processing'
+		// or 'sending' forever, and nothing else ever touches those
+		// statuses. An hour past any legitimate start the send is provably
+		// dead. Timestamps are written in UTC by create(), so the
+		// comparison is safe.
+		$stuck_cutoff = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
+
+		$stuck = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'failed' WHERE status IN ('processing','sending') AND created_at < %s AND (scheduled_at IS NULL OR scheduled_at < %s)",
+				$stuck_cutoff,
+				$stuck_cutoff
+			)
+		);
+
+		if ( $stuck > 0 ) {
+			Bcsend_Logger::log( 'push', sprintf( '%d push notifications were stuck mid-send for over an hour and were marked failed. Some devices may already have received them; per-device results are in the push history.', $stuck ), '', 'error' );
+		}
 	}
 
 	// =========================================================================
@@ -656,19 +711,85 @@ class Bcsend_Push_Manager {
 	private static function resolve_all_users() {
 		global $wpdb;
 
-		$device_table = $wpdb->prefix . 'bbapp_user_devices';
+		$user_ids = Bcsend_Devices::user_ids_with_devices();
 
-		// Check table exists.
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $device_table ) );
-		if ( ! $exists ) {
+		$device_table = $wpdb->prefix . 'bbapp_user_devices';
+		$exists       = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $device_table ) );
+
+		if ( $exists ) {
+			$bb_ids   = $wpdb->get_col(
+				"SELECT DISTINCT user_id FROM {$device_table} WHERE device_token != ''"
+			);
+			$user_ids = array_merge( $user_ids, array_map( 'intval', (array) $bb_ids ) );
+		}
+
+		return array_values( array_unique( $user_ids ) );
+	}
+
+	/**
+	 * All device tokens for a push target, from every registered source.
+	 *
+	 * The single entry point every send path must use: Beacon's own device
+	 * registry (web push subscribers, imported tokens, custom apps) merged
+	 * with the BuddyBoss device table where that plugin is present. Handles
+	 * the 'all_subscribers' audience, which includes anonymous web
+	 * subscribers that have no WordPress user at all.
+	 *
+	 * @param string $target_type Target type.
+	 * @param array  $target_data Target payload (roles, user IDs, ...).
+	 * @return array Token rows ({user_id, device_token, platform}).
+	 */
+	public static function collect_tokens_for_target( $target_type, $target_data = array() ) {
+		$push_service = new Bcsend_Push_Service();
+
+		if ( 'all_subscribers' === $target_type ) {
+			return self::merge_token_rows(
+				Bcsend_Devices::all_tokens(),
+				$push_service->get_tokens_for_users( self::resolve_all_users() )
+			);
+		}
+
+		$user_ids = self::resolve_recipients( $target_type, $target_data );
+
+		if ( empty( $user_ids ) ) {
 			return array();
 		}
 
-		$results = $wpdb->get_col(
-			"SELECT DISTINCT user_id FROM {$device_table} WHERE device_token != ''"
+		return self::merge_token_rows(
+			Bcsend_Devices::tokens_for_users( $user_ids ),
+			$push_service->get_tokens_for_users( $user_ids )
 		);
+	}
 
-		return array_map( 'intval', $results );
+	/**
+	 * Merge token row sets from multiple sources, deduplicating by token.
+	 *
+	 * @param array ...$sources Arrays of {user_id, device_token[, platform]} rows.
+	 * @return array
+	 */
+	public static function merge_token_rows( ...$sources ) {
+		$seen   = array();
+		$merged = array();
+
+		foreach ( $sources as $rows ) {
+			foreach ( (array) $rows as $row ) {
+				$token = isset( $row->device_token ) ? (string) $row->device_token : '';
+
+				if ( '' === $token || isset( $seen[ $token ] ) ) {
+					continue;
+				}
+
+				$seen[ $token ] = true;
+
+				if ( ! isset( $row->platform ) ) {
+					$row->platform = 'app';
+				}
+
+				$merged[] = $row;
+			}
+		}
+
+		return $merged;
 	}
 
 	/**
@@ -693,25 +814,47 @@ class Bcsend_Push_Manager {
 			return array();
 		}
 
-		// Filter to only users with device tokens.
-		global $wpdb;
-		$device_table = $wpdb->prefix . 'bbapp_user_devices';
+		// Keep only users that actually have a device registered, in either
+		// source. BuddyBoss is optional: a Firebase-only site resolves
+		// entirely from Beacon's own registry.
+		return self::filter_users_with_devices( array_map( 'intval', $users ) );
+	}
 
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $device_table ) );
-		if ( ! $exists ) {
+	/**
+	 * Filter a user list down to those with at least one registered device.
+	 *
+	 * Checks Beacon's device registry first, then adds any users found in the
+	 * BuddyBoss device table when that plugin is installed.
+	 *
+	 * @param array $user_ids Candidate user IDs.
+	 * @return array
+	 */
+	private static function filter_users_with_devices( $user_ids ) {
+		global $wpdb;
+
+		$user_ids = array_values( array_filter( array_map( 'intval', (array) $user_ids ) ) );
+
+		if ( empty( $user_ids ) ) {
 			return array();
 		}
 
-		$placeholders = implode( ',', array_fill( 0, count( $users ), '%d' ) );
+		$with_devices = array_values( array_intersect( $user_ids, Bcsend_Devices::user_ids_with_devices() ) );
 
-		$results = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT DISTINCT user_id FROM {$device_table} WHERE user_id IN ({$placeholders}) AND device_token != ''",
-				...$users
-			)
-		);
+		$device_table = $wpdb->prefix . 'bbapp_user_devices';
+		$exists       = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $device_table ) );
 
-		return array_map( 'intval', $results );
+		if ( $exists ) {
+			$placeholders = implode( ',', array_fill( 0, count( $user_ids ), '%d' ) );
+			$bb_ids       = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT DISTINCT user_id FROM {$device_table} WHERE user_id IN ({$placeholders}) AND device_token != ''",
+					...$user_ids
+				)
+			);
+			$with_devices = array_merge( $with_devices, array_map( 'intval', (array) $bb_ids ) );
+		}
+
+		return array_values( array_unique( $with_devices ) );
 	}
 
 	/**
@@ -725,26 +868,7 @@ class Bcsend_Push_Manager {
 			return array();
 		}
 
-		$user_ids = array_map( 'intval', $user_ids );
-
-		global $wpdb;
-		$device_table = $wpdb->prefix . 'bbapp_user_devices';
-
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $device_table ) );
-		if ( ! $exists ) {
-			return array();
-		}
-
-		$placeholders = implode( ',', array_fill( 0, count( $user_ids ), '%d' ) );
-
-		$results = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT DISTINCT user_id FROM {$device_table} WHERE user_id IN ({$placeholders}) AND device_token != ''",
-				...$user_ids
-			)
-		);
-
-		return array_map( 'intval', $results );
+		return self::filter_users_with_devices( $user_ids );
 	}
 
 	/**

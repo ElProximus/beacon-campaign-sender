@@ -50,6 +50,41 @@ $status_options = array( 'all', 'pending', 'scheduled', 'sending', 'sent', 'fail
 		</div>
 	</div>
 
+	<div class="bcsend-card" style="margin: 16px 0; padding: 16px 20px; background: #fff; border: 1px solid #dcdcde; border-radius: 8px;">
+		<h3 style="margin: 0 0 6px;"><?php esc_html_e( 'Import device tokens', 'beacon-campaign-sender' ); ?></h3>
+		<p class="description" style="margin-top: 0;"><?php esc_html_e( 'Already have a mobile app? Paste FCM device tokens from your own backend (one per line) to push to those devices through Beacon. Tip: if your app subscribes devices to a Firebase topic, you can skip importing and target the topic directly when composing a push.', 'beacon-campaign-sender' ); ?></p>
+		<textarea id="bcsend-import-tokens" rows="4" class="large-text code" placeholder="<?php esc_attr_e( 'One FCM device token per line…', 'beacon-campaign-sender' ); ?>"></textarea>
+		<p>
+			<label>
+				<?php esc_html_e( 'Platform:', 'beacon-campaign-sender' ); ?>
+				<select id="bcsend-import-platform">
+					<option value="app"><?php esc_html_e( 'Mobile app', 'beacon-campaign-sender' ); ?></option>
+					<option value="android"><?php esc_html_e( 'Android', 'beacon-campaign-sender' ); ?></option>
+					<option value="ios"><?php esc_html_e( 'iOS', 'beacon-campaign-sender' ); ?></option>
+					<option value="web"><?php esc_html_e( 'Web', 'beacon-campaign-sender' ); ?></option>
+				</select>
+			</label>
+			<button type="button" class="button" id="bcsend-import-tokens-btn"><?php esc_html_e( 'Import tokens', 'beacon-campaign-sender' ); ?></button>
+			<span class="bcsend-inline-status" id="bcsend-import-tokens-status"></span>
+		</p>
+		<?php $bcsend_device_stats = Bcsend_Devices::stats(); ?>
+		<p style="margin-bottom: 0;">
+			<span id="bcsend-device-stats">
+				<?php
+				printf(
+					/* translators: 1: active device count, 2: stale device count. */
+					esc_html__( 'Registered devices: %1$d active, %2$d stale.', 'beacon-campaign-sender' ),
+					(int) $bcsend_device_stats['active'],
+					(int) $bcsend_device_stats['stale']
+				);
+				?>
+			</span>
+			<button type="button" class="button" id="bcsend-purge-stale-btn" <?php disabled( 0 === (int) $bcsend_device_stats['stale'] ); ?>><?php esc_html_e( 'Remove stale devices', 'beacon-campaign-sender' ); ?></button>
+			<span class="bcsend-inline-status" id="bcsend-purge-stale-status"></span>
+		</p>
+		<p class="description" style="margin: 4px 0 0;"><?php esc_html_e( 'Stale devices are tokens Firebase reported as dead. They are cleaned up automatically after 30 days; this removes them immediately and frees registry capacity.', 'beacon-campaign-sender' ); ?></p>
+	</div>
+
 	<div class="bcsend-push-toolbar">
 		<form method="get" style="display: inline;">
 			<input type="hidden" name="page" value="bcsend-push" />

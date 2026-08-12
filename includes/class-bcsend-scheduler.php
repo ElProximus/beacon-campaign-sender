@@ -576,6 +576,8 @@ class Bcsend_Scheduler {
 
 		Bcsend_Logger::delete_old_logs( $retention_days );
 		Bcsend_Email_Log::delete_old( $retention_days );
+		Bcsend_Ai_Jobs::purge_old();
+		Bcsend_Devices::purge_stale();
 
 		// Expire overdue standalone push notifications.
 		Bcsend_Push_Manager::expire_overdue();

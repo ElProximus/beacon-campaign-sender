@@ -45,6 +45,18 @@ class Bcsend_Composer {
 			$social_posts = $this->get_social_posts( $campaign_id );
 		} elseif ( $template_id > 0 ) {
 			$template = $this->get_template( $template_id );
+		} else {
+			// Brand-new campaign with no explicit template: preload the
+			// default template so every campaign starts from the house design.
+			$default_template_id = (int) get_option( 'bcsend_default_template_id', 0 );
+
+			if ( $default_template_id > 0 ) {
+				$template = $this->get_template( $default_template_id );
+
+				if ( $template ) {
+					$template_id = $default_template_id;
+				}
+			}
 		}
 
 		include plugin_dir_path( __FILE__ ) . 'views/composer.php';

@@ -49,6 +49,18 @@ class Bcsend_Settings {
 	);
 
 	/**
+	 * Side effects collected during sanitize(), executed once after save.
+	 *
+	 * sanitize() must stay pure - WordPress can legally run it twice on one
+	 * save - so it only records what the save implies here, and
+	 * handle_settings_save() (pre_update_option filter, fires exactly once
+	 * per save) performs the remote syncs and capability changes.
+	 *
+	 * @var array
+	 */
+	private $pending_save_actions = array();
+
+	/**
 	 * Register settings with WordPress Settings API.
 	 *
 	 * @since 1.0.0
@@ -61,6 +73,23 @@ class Bcsend_Settings {
 				'sanitize_callback' => array( $this, 'sanitize' ),
 			)
 		);
+
+		// The Settings page menu is gated on the plugin's own manage_bcsend
+		// capability, but options.php enforces manage_options for the group
+		// unless told otherwise - without this filter a delegated manager can
+		// edit every field yet always gets "Sorry, you are not allowed..."
+		// on save.
+		add_filter(
+			'option_page_capability_' . self::SETTINGS_GROUP,
+			static function () {
+				return 'manage_bcsend';
+			}
+		);
+
+		// Post-save side effects. pre_update_option_{option} fires exactly
+		// once per save - even when the stored value is unchanged, which
+		// matters because the campaign-access list is not part of the option.
+		add_filter( 'pre_update_option_' . self::OPTION_NAME, array( $this, 'handle_settings_save' ), 10, 2 );
 	}
 
 	/**
@@ -99,19 +128,30 @@ class Bcsend_Settings {
 		$sanitized['brevo_sender_email']        = isset( $input['brevo_sender_email'] ) ? sanitize_email( $input['brevo_sender_email'] ) : '';
 		$sanitized['reply_to_email']            = isset( $input['reply_to_email'] ) ? sanitize_email( $input['reply_to_email'] ) : '';
 		$sanitized['default_subscriber_lists']  = $this->sanitize_integer_list(
-			isset( $input['default_subscriber_lists'] ) ? $input['default_subscriber_lists'] : array( 14 )
+			isset( $input['default_subscriber_lists'] ) ? $input['default_subscriber_lists'] : array()
 		);
 		$sanitized['subscribe_terms_url']       = isset( $input['subscribe_terms_url'] ) ? esc_url_raw( $input['subscribe_terms_url'] ) : home_url( '/terms-of-service/' );
 		$sanitized['subscribe_terms_text']      = isset( $input['subscribe_terms_text'] ) ? sanitize_text_field( $input['subscribe_terms_text'] ) : __( 'By signing up, you agree to our', 'beacon-campaign-sender' );
 		$sanitized['subscribe_terms_link_text'] = isset( $input['subscribe_terms_link_text'] ) ? sanitize_text_field( $input['subscribe_terms_link_text'] ) : __( 'Terms of Service', 'beacon-campaign-sender' );
 		// Strip tags so custom CSS cannot break out of the <style> wrapper; line breaks are preserved.
-		$sanitized['subscribe_custom_css']      = isset( $input['subscribe_custom_css'] ) ? trim( wp_strip_all_tags( (string) $input['subscribe_custom_css'] ) ) : '';
-		$sanitized['subscribe_enabled']         = isset( $input['subscribe_enabled'] ) ? 1 : 0;
+		$sanitized['subscribe_custom_css'] = isset( $input['subscribe_custom_css'] ) ? trim( wp_strip_all_tags( (string) $input['subscribe_custom_css'] ) ) : '';
+		$sanitized['subscribe_enabled']    = isset( $input['subscribe_enabled'] ) ? 1 : 0;
 
 		// Push settings.
 		$sanitized['push_mode']                     = isset( $input['push_mode'] ) && in_array( $input['push_mode'], array( 'auto', 'manual' ), true ) ? $input['push_mode'] : 'auto';
 		$sanitized['firebase_service_account_json'] = $this->sanitize_secret_field( $input, $existing, 'firebase_service_account_json', 'textarea' );
 		$sanitized['firebase_project_id']           = isset( $input['firebase_project_id'] ) ? sanitize_text_field( $input['firebase_project_id'] ) : '';
+
+		// Web push settings.
+		$sanitized['webpush_enabled'] = isset( $input['webpush_enabled'] ) ? 1 : 0;
+		$sanitized['webpush_bell']    = isset( $input['webpush_bell'] ) ? 1 : 0;
+
+		$web_config = isset( $input['firebase_web_config'] ) ? trim( (string) wp_unslash( $input['firebase_web_config'] ) ) : '';
+		if ( '' !== $web_config && null === json_decode( $web_config, true ) ) {
+			$web_config = '';
+		}
+		$sanitized['firebase_web_config'] = wp_kses( $web_config, array() );
+		$sanitized['firebase_vapid_key']  = isset( $input['firebase_vapid_key'] ) ? sanitize_text_field( $input['firebase_vapid_key'] ) : '';
 
 		// Zernio settings.
 		$sanitized['zernio_api_key']         = $this->sanitize_secret_field( $input, $existing, 'zernio_api_key' );
@@ -120,11 +160,54 @@ class Bcsend_Settings {
 		$sanitized['zernio_webhook_enabled'] = isset( $input['zernio_webhook_enabled'] ) ? 1 : 0;
 		$sanitized['zernio_post_mode']       = isset( $input['zernio_post_mode'] ) && in_array( $input['zernio_post_mode'], array( 'single', 'per_platform' ), true ) ? $input['zernio_post_mode'] : 'single';
 
+		// Composer social defaults.
+		$sanitized['social_default_enabled']  = isset( $input['social_default_enabled'] ) ? 1 : 0;
+		$sanitized['social_default_accounts'] = array();
+		if ( isset( $input['social_default_accounts'] ) && is_array( $input['social_default_accounts'] ) ) {
+			$default_accounts = array_values(
+				array_filter(
+					array_map( 'sanitize_text_field', array_map( 'strval', $input['social_default_accounts'] ) )
+				)
+			);
+
+			// The composer supports one default account per platform - keep
+			// the first submitted account for each platform (accounts whose
+			// platform is unknown are kept as-is).
+			$account_platforms = array();
+			foreach ( (array) get_option( 'bcsend_zernio_accounts', array() ) as $zernio_account ) {
+				if ( ! is_array( $zernio_account ) || empty( $zernio_account['platform'] ) ) {
+					continue;
+				}
+				foreach ( array( 'id', '_id', 'accountId', 'account_id', 'uuid' ) as $id_key ) {
+					if ( isset( $zernio_account[ $id_key ] ) && '' !== (string) $zernio_account[ $id_key ] ) {
+						$account_platforms[ (string) $zernio_account[ $id_key ] ] = (string) $zernio_account['platform'];
+						break;
+					}
+				}
+			}
+
+			$used_platforms = array();
+			foreach ( $default_accounts as $default_account ) {
+				$platform = isset( $account_platforms[ $default_account ] ) ? $account_platforms[ $default_account ] : '';
+
+				if ( '' !== $platform && isset( $used_platforms[ $platform ] ) ) {
+					continue;
+				}
+
+				if ( '' !== $platform ) {
+					$used_platforms[ $platform ] = true;
+				}
+
+				$sanitized['social_default_accounts'][] = $default_account;
+			}
+		}
+
 		// Brand Voice.
 		$sanitized['brand_voice'] = isset( $input['brand_voice'] ) ? sanitize_textarea_field( $input['brand_voice'] ) : '';
 
-		// Base Template.
-		$sanitized['base_template'] = isset( $input['base_template'] ) ? bcsend_kses_email( $input['base_template'] ) : '';
+		// The old Base Template setting was retired in favor of the default
+		// template on the Templates screen (existing values are migrated to a
+		// real template on upgrade).
 
 		// AI settings.
 		$sanitized['ai_provider'] = isset( $input['ai_provider'] ) && in_array( $input['ai_provider'], array( 'anthropic', 'openai' ), true )
@@ -133,17 +216,28 @@ class Bcsend_Settings {
 
 		$sanitized['anthropic_api_key'] = $this->sanitize_secret_field( $input, $existing, 'anthropic_api_key' );
 
-		$allowed_models               = array( 'claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6' );
-		$sanitized['anthropic_model'] = isset( $input['anthropic_model'] ) && in_array( $input['anthropic_model'], $allowed_models, true )
+		// Model validation is driven by the catalog - the single authority on
+		// available models. An unknown submitted value falls back to the
+		// previously saved selection (still catalog-validated) rather than
+		// silently resetting an admin's choice.
+		$saved_anthropic              = isset( $existing['anthropic_model'] ) && in_array( $existing['anthropic_model'], Bcsend_Model_Catalog::allowed_ids( 'anthropic' ), true )
+			? $existing['anthropic_model']
+			: Bcsend_Model_Catalog::default_model( 'anthropic' );
+		$sanitized['anthropic_model'] = isset( $input['anthropic_model'] ) && in_array( $input['anthropic_model'], Bcsend_Model_Catalog::allowed_ids( 'anthropic' ), true )
 			? $input['anthropic_model']
-			: 'claude-sonnet-4-6';
+			: $saved_anthropic;
 
 		$sanitized['openai_api_key'] = $this->sanitize_secret_field( $input, $existing, 'openai_api_key' );
 
-		$allowed_openai_models     = array( 'gpt-5.5', 'gpt-5.4', 'gpt-5.2', 'gpt-5-mini' );
-		$sanitized['openai_model'] = isset( $input['openai_model'] ) && in_array( $input['openai_model'], $allowed_openai_models, true )
+		$saved_openai              = isset( $existing['openai_model'] ) && in_array( $existing['openai_model'], Bcsend_Model_Catalog::allowed_ids( 'openai' ), true )
+			? $existing['openai_model']
+			: Bcsend_Model_Catalog::default_model( 'openai' );
+		$sanitized['openai_model'] = isset( $input['openai_model'] ) && in_array( $input['openai_model'], Bcsend_Model_Catalog::allowed_ids( 'openai' ), true )
 			? $input['openai_model']
-			: 'gpt-5.4';
+			: $saved_openai;
+
+		// Fable -> Opus refusal fallback (default on, disclosed in the UI).
+		$sanitized['fable_fallback_enabled'] = isset( $input['fable_fallback_enabled'] ) ? 1 : 0;
 
 		// SMTP routing.
 		$sanitized['smtp_routing_enabled'] = isset( $input['smtp_routing_enabled'] ) ? 1 : 0;
@@ -161,63 +255,118 @@ class Bcsend_Settings {
 			? $input['email_log_detail_level']
 			: 'minimal';
 
-		$effective_api_key = $this->get_plain_secret_value( $sanitized['brevo_api_key'] );
+		// Record (never perform) the save's side effects: remote syncs and
+		// capability changes run once in handle_settings_save() after the
+		// values are stored. Stashing is idempotent, so a double sanitize
+		// pass cannot double-fire anything.
+		$this->pending_save_actions = array(
+			'brevo'  => array(
+				'enabled' => ! empty( $sanitized['smtp_routing_enabled'] ),
+				'email'   => $sanitized['brevo_sender_email'],
+				'api_key' => $this->get_plain_secret_value( $sanitized['brevo_api_key'] ),
+			),
+			'zernio' => array(
+				'api_key'        => $this->get_plain_secret_value( $sanitized['zernio_api_key'] ),
+				'webhook_secret' => $this->get_plain_secret_value( $sanitized['zernio_webhook_secret'] ),
+				'enabled'        => ! empty( $sanitized['zernio_webhook_enabled'] ) ? 1 : 0,
+			),
+		);
 
-		if ( ! empty( $sanitized['smtp_routing_enabled'] ) && ! empty( $sanitized['brevo_sender_email'] ) && ! empty( $effective_api_key ) ) {
-			$existing_email   = isset( $existing['brevo_sender_email'] ) ? $existing['brevo_sender_email'] : '';
-			$existing_key_enc = isset( $existing['brevo_api_key'] ) ? $existing['brevo_api_key'] : '';
-			$existing_key     = ! empty( $existing_key_enc ) ? (string) Bcsend_Encryption::decrypt( $existing_key_enc ) : '';
-
-			$email_changed         = $sanitized['brevo_sender_email'] !== $existing_email;
-			$key_changed           = $effective_api_key !== $existing_key;
-			$routing_newly_enabled = empty( $existing['smtp_routing_enabled'] ) && ! empty( $sanitized['smtp_routing_enabled'] );
-
-			if ( $email_changed || $key_changed || $routing_newly_enabled ) {
-				$this->check_sender_domain_verification( $sanitized['brevo_sender_email'], $effective_api_key );
-			}
-		}
-
-		$effective_zernio_api_key         = $this->get_plain_secret_value( $sanitized['zernio_api_key'] );
-		$effective_zernio_webhook_secret  = $this->get_plain_secret_value( $sanitized['zernio_webhook_secret'] );
-
-		if ( ! empty( $effective_zernio_api_key ) && ! empty( $effective_zernio_webhook_secret ) ) {
-			$webhook_sync = Bcsend_Plugin::sync_zernio_webhook_settings(
-				array(
-					'zernio_api_key'         => $effective_zernio_api_key,
-					'zernio_webhook_secret'  => $effective_zernio_webhook_secret,
-					'zernio_webhook_enabled' => ! empty( $sanitized['zernio_webhook_enabled'] ) ? 1 : 0,
-				)
+		if ( ! empty( $input['campaign_access_save'] ) ) {
+			$this->pending_save_actions['campaign_access'] = array(
+				'user_ids' => isset( $input['campaign_access_user_ids'] )
+					? array_map( 'absint', (array) $input['campaign_access_user_ids'] )
+					: array(),
 			);
-
-			if ( is_wp_error( $webhook_sync ) ) {
-				add_settings_error(
-					'bcsend_settings',
-					'bcsend_zernio_webhook_sync_failed',
-					sprintf(
-						/* translators: %s: error message */
-						__( 'Settings saved, but Zernio webhook sync failed: %s', 'beacon-campaign-sender' ),
-						$webhook_sync->get_error_message()
-					),
-					'error'
-				);
-			} else {
-				add_settings_error(
-					'bcsend_settings',
-					'bcsend_zernio_webhook_sync_success',
-					__( 'Settings saved and Zernio webhook synced successfully.', 'beacon-campaign-sender' ),
-					'success'
-				);
-			}
 		}
 
 		// Encrypt sensitive fields.
 		$sanitized = Bcsend_Encryption::encrypt_settings( $sanitized );
 
-		if ( ! empty( $input['campaign_access_save'] ) ) {
-			$this->sync_campaign_access_users( $input );
+		return $sanitized;
+	}
+
+	/**
+	 * Execute the side effects of a settings save, exactly once.
+	 *
+	 * Runs on pre_update_option_bcsend_settings with the sanitized new value
+	 * and the stored old value. Remote syncs only fire when the fields they
+	 * depend on actually changed, so saving unrelated settings no longer
+	 * blocks on Zernio/Brevo HTTP calls.
+	 *
+	 * @param array $value     New (sanitized, encrypted) settings value.
+	 * @param mixed $old_value Previously stored settings value.
+	 * @return array The new value, unmodified.
+	 */
+	public function handle_settings_save( $value, $old_value ) {
+		$actions                    = $this->pending_save_actions;
+		$this->pending_save_actions = array();
+
+		// A programmatic update_option() that did not pass through sanitize()
+		// carries no recorded actions - nothing to do.
+		if ( empty( $actions ) ) {
+			return $value;
 		}
 
-		return $sanitized;
+		$old = is_array( $old_value ) ? $old_value : array();
+
+		// Brevo sender-domain verification - only when its inputs changed.
+		if ( ! empty( $actions['brevo']['enabled'] ) && ! empty( $actions['brevo']['email'] ) && ! empty( $actions['brevo']['api_key'] ) ) {
+			$old_email             = isset( $old['brevo_sender_email'] ) ? $old['brevo_sender_email'] : '';
+			$old_key               = ! empty( $old['brevo_api_key'] ) ? (string) Bcsend_Encryption::decrypt( $old['brevo_api_key'] ) : '';
+			$routing_newly_enabled = empty( $old['smtp_routing_enabled'] );
+
+			if ( $actions['brevo']['email'] !== $old_email || $actions['brevo']['api_key'] !== $old_key || $routing_newly_enabled ) {
+				$this->check_sender_domain_verification( $actions['brevo']['email'], $actions['brevo']['api_key'] );
+			}
+		}
+
+		// Zernio webhook sync - only when the Zernio fields actually changed.
+		if ( ! empty( $actions['zernio']['api_key'] ) && ! empty( $actions['zernio']['webhook_secret'] ) ) {
+			$old_api     = ! empty( $old['zernio_api_key'] ) ? (string) Bcsend_Encryption::decrypt( $old['zernio_api_key'] ) : '';
+			$old_secret  = ! empty( $old['zernio_webhook_secret'] ) ? (string) Bcsend_Encryption::decrypt( $old['zernio_webhook_secret'] ) : '';
+			$old_enabled = ! empty( $old['zernio_webhook_enabled'] ) ? 1 : 0;
+
+			$zernio_changed = $actions['zernio']['api_key'] !== $old_api
+				|| $actions['zernio']['webhook_secret'] !== $old_secret
+				|| $actions['zernio']['enabled'] !== $old_enabled;
+
+			if ( $zernio_changed ) {
+				$webhook_sync = Bcsend_Plugin::sync_zernio_webhook_settings(
+					array(
+						'zernio_api_key'         => $actions['zernio']['api_key'],
+						'zernio_webhook_secret'  => $actions['zernio']['webhook_secret'],
+						'zernio_webhook_enabled' => $actions['zernio']['enabled'],
+					)
+				);
+
+				if ( is_wp_error( $webhook_sync ) ) {
+					add_settings_error(
+						'bcsend_settings',
+						'bcsend_zernio_webhook_sync_failed',
+						sprintf(
+							/* translators: %s: error message */
+							__( 'Settings saved, but Zernio webhook sync failed: %s', 'beacon-campaign-sender' ),
+							$webhook_sync->get_error_message()
+						),
+						'error'
+					);
+				} else {
+					add_settings_error(
+						'bcsend_settings',
+						'bcsend_zernio_webhook_sync_success',
+						__( 'Settings saved and Zernio webhook synced successfully.', 'beacon-campaign-sender' ),
+						'success'
+					);
+				}
+			}
+		}
+
+		if ( isset( $actions['campaign_access'] ) ) {
+			$this->sync_campaign_access_users( $actions['campaign_access']['user_ids'] );
+		}
+
+		return $value;
 	}
 
 	/**
@@ -348,18 +497,15 @@ class Bcsend_Settings {
 	/**
 	 * Add or remove per-user campaign capabilities from the Access settings tab.
 	 *
-	 * @param array $input Raw settings input.
+	 * @param array $selected_ids User IDs that should have campaign access.
 	 * @return void
 	 */
-	private function sync_campaign_access_users( $input ) {
-		if ( ! current_user_can( 'manage_bcsend' ) ) {
+	private function sync_campaign_access_users( $selected_ids ) {
+		if ( ! current_user_can( 'manage_bcsend' ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Plugin capability registered in Bcsend_Activator.
 			return;
 		}
 
-		$selected_ids = isset( $input['campaign_access_user_ids'] )
-			? array_map( 'absint', (array) $input['campaign_access_user_ids'] )
-			: array();
-		$selected_ids = array_values( array_unique( array_filter( $selected_ids ) ) );
+		$selected_ids = array_values( array_unique( array_filter( array_map( 'absint', (array) $selected_ids ) ) ) );
 
 		$updated_count = 0;
 		foreach ( self::get_campaign_access_users() as $row ) {
@@ -415,24 +561,30 @@ class Bcsend_Settings {
 			'push_mode'                     => 'auto',
 			'firebase_service_account_json' => '',
 			'firebase_project_id'           => '',
+			'webpush_enabled'               => 0,
+			'webpush_bell'                  => 0,
+			'firebase_web_config'           => '',
+			'firebase_vapid_key'            => '',
 			'zernio_api_key'                => '',
 			'zernio_profile_id'             => '',
 			'zernio_webhook_secret'         => '',
 			'zernio_webhook_enabled'        => 0,
 			'zernio_post_mode'              => 'single',
+			'social_default_enabled'        => 0,
+			'social_default_accounts'       => array(),
 			'brand_voice'                   => '',
-			'base_template'                 => '',
 			'ai_provider'                   => 'anthropic',
 			'anthropic_api_key'             => '',
-			'anthropic_model'               => 'claude-sonnet-4-6',
+			'anthropic_model'               => Bcsend_Model_Catalog::default_model( 'anthropic' ),
+			'fable_fallback_enabled'        => 1,
 			'openai_api_key'                => '',
-			'openai_model'                  => 'gpt-5.4',
+			'openai_model'                  => Bcsend_Model_Catalog::default_model( 'openai' ),
 			'smtp_routing_enabled'          => 0,
 			'smtp_force_from'               => 0,
 			'abilities_bridge_enabled'      => 0,
 			'log_retention_days'            => 30,
 			'email_log_detail_level'        => 'minimal',
-			'default_subscriber_lists'      => array( 14 ),
+			'default_subscriber_lists'      => array(),
 			'subscribe_terms_url'           => home_url( '/terms-of-service/' ),
 			'subscribe_terms_text'          => __( 'By signing up, you agree to our', 'beacon-campaign-sender' ),
 			'subscribe_terms_link_text'     => __( 'Terms of Service', 'beacon-campaign-sender' ),
@@ -464,12 +616,12 @@ class Bcsend_Settings {
 		}
 
 		if ( ! is_array( $value ) ) {
-			return array( 14 );
+			return array();
 		}
 
 		$ints = array_values( array_unique( array_filter( array_map( 'intval', $value ) ) ) );
 
-		return ! empty( $ints ) ? $ints : array( 14 );
+		return ! empty( $ints ) ? $ints : array();
 	}
 
 	/**

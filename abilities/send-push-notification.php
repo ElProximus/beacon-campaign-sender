@@ -131,7 +131,10 @@ function bcsend_ability_send_push_notification( $input = array() ) {
 		return new WP_Error( 'push_not_configured', 'Push notification service is not configured.' );
 	}
 
-	$tokens = $push_service->get_tokens_for_users( $user_ids );
+	$tokens = Bcsend_Push_Manager::merge_token_rows(
+		Bcsend_Devices::tokens_for_users( $user_ids ),
+		$push_service->get_tokens_for_users( $user_ids )
+	);
 
 	if ( empty( $tokens ) ) {
 		return new WP_Error( 'no_tokens', 'No push tokens found for segment users.' );

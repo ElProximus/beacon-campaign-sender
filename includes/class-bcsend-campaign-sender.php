@@ -83,16 +83,42 @@ class Bcsend_Campaign_Sender {
 			);
 		}
 
-		// Mark campaign as sending, set queued_at if not already set.
-		$update_fields = array( 'status' => 'sending' );
-		$update_format = array( '%s' );
+		// Atomically claim delivery. A scheduled callback, Send Now request,
+		// second browser tab, or duplicate callback can all reach send() at
+		// once; exactly one process is allowed to move the row to sending.
+		// Note: {$table} interpolation (prefix + literal), not the %i
+		// placeholder - %i requires WP 6.2 and this plugin supports 5.8;
+		// on older WP the neutralized placeholder made every claim fail.
+		$claimed = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'sending', queued_at = COALESCE(queued_at, %s)
+				WHERE id = %d AND status IN ('scheduled','queued')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				current_time( 'mysql', true ),
+				(int) $campaign_id
+			)
+		);
 
-		if ( empty( $campaign->queued_at ) ) {
-			$update_fields['queued_at'] = current_time( 'mysql', true );
-			$update_format[]            = '%s';
+		if ( false === $claimed ) {
+			Bcsend_Logger::log( 'campaign_send', 'Campaign claim failed because the database update failed.', wp_json_encode( array( 'campaign_id' => $campaign_id ) ), 'error' );
+			return new WP_Error( 'campaign_claim_failed', 'Campaign delivery could not be claimed.' );
 		}
 
-		$wpdb->update( $table, $update_fields, array( 'id' => $campaign_id ), $update_format, array( '%d' ) );
+		if ( 1 !== $claimed ) {
+			$current_status = (string) $wpdb->get_var(
+				$wpdb->prepare( "SELECT status FROM {$table} WHERE id = %d", (int) $campaign_id ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			);
+			Bcsend_Logger::log(
+				'campaign_send',
+				'Campaign send skipped because another process already claimed it.',
+				wp_json_encode(
+					array(
+						'campaign_id' => $campaign_id,
+						'status'      => $current_status,
+					)
+				)
+			);
+			return new WP_Error( 'campaign_already_claimed', 'This campaign is already being sent or is no longer available to send.' );
+		}
 
 		Bcsend_Logger::log(
 			'campaign_send',
@@ -557,15 +583,17 @@ class Bcsend_Campaign_Sender {
 			);
 		} else {
 			// Synchronous fallback: send all batches immediately.
-			$total_sent   = 0;
-			$total_failed = 0;
+			$total_sent      = 0;
+			$total_failed    = 0;
+			$total_ambiguous = 0;
 
 			foreach ( $batches as $index => $batch_tokens ) {
 				$result = $push_service->send_batch( $batch_tokens, $push_title, $push_message );
 
 				if ( is_array( $result ) ) {
-					$total_sent   += isset( $result['sent'] ) ? (int) $result['sent'] : 0;
-					$total_failed += isset( $result['failed'] ) ? (int) $result['failed'] : 0;
+					$total_sent      += isset( $result['sent'] ) ? (int) $result['sent'] : 0;
+					$total_failed    += isset( $result['failed'] ) ? (int) $result['failed'] : 0;
+					$total_ambiguous += isset( $result['ambiguous'] ) ? (int) $result['ambiguous'] : 0;
 				}
 
 				Bcsend_Logger::log(
@@ -578,6 +606,7 @@ class Bcsend_Campaign_Sender {
 							'total'       => count( $batch_tokens ),
 							'sent'        => isset( $result['sent'] ) ? $result['sent'] : 0,
 							'failed'      => isset( $result['failed'] ) ? $result['failed'] : 0,
+							'ambiguous'   => isset( $result['ambiguous'] ) ? $result['ambiguous'] : 0,
 						)
 					)
 				);
@@ -602,6 +631,7 @@ class Bcsend_Campaign_Sender {
 						'push'         => $push_final_status,
 						'total_sent'   => $total_sent,
 						'total_failed' => $total_failed,
+						'ambiguous'    => $total_ambiguous,
 					)
 				)
 			);
@@ -656,14 +686,16 @@ class Bcsend_Campaign_Sender {
 			)
 		);
 
-		$total_sent   = 0;
-		$total_failed = 0;
+		$total_sent      = 0;
+		$total_failed    = 0;
+		$total_ambiguous = 0;
 
 		foreach ( $batch_logs as $log ) {
 			$ctx = json_decode( $log->payload, true );
 			if ( is_array( $ctx ) ) {
-				$total_sent   += isset( $ctx['sent'] ) ? (int) $ctx['sent'] : 0;
-				$total_failed += isset( $ctx['failed'] ) ? (int) $ctx['failed'] : 0;
+				$total_sent      += isset( $ctx['sent'] ) ? (int) $ctx['sent'] : 0;
+				$total_failed    += isset( $ctx['failed'] ) ? (int) $ctx['failed'] : 0;
+				$total_ambiguous += isset( $ctx['ambiguous'] ) ? (int) $ctx['ambiguous'] : 0;
 			}
 		}
 
@@ -687,6 +719,7 @@ class Bcsend_Campaign_Sender {
 					'push_status'  => $push_status,
 					'total_sent'   => $total_sent,
 					'total_failed' => $total_failed,
+					'ambiguous'    => $total_ambiguous,
 				)
 			)
 		);

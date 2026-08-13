@@ -13,8 +13,9 @@
  *  - frontend configuration sourced from Settings > Push (Firebase web app
  *    config + VAPID public key).
  *
- * The Firebase JS SDK is loaded from Google's official gstatic CDN - the
- * standard delivery mechanism Firebase documents for web apps.
+ * The Firebase JS SDK is BUNDLED with the plugin (assets/js/vendor/firebase,
+ * pinned version, Apache-2.0) so no executable code is loaded from external
+ * servers - see the vendor README for the upgrade procedure.
  *
  * @package Bcsend_Plugin
  * @since   1.0.6
@@ -30,7 +31,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Bcsend_Web_Push {
 
 	/**
-	 * Firebase JS SDK version served from gstatic.
+	 * Bundled Firebase JS SDK version (see assets/js/vendor/firebase/README.md).
 	 */
 	const FIREBASE_JS_VERSION = '10.12.2';
 
@@ -132,8 +133,14 @@ self.addEventListener('notificationclick', function (event) {
 });
 
 JS;
-		echo "importScripts('https://www.gstatic.com/firebasejs/{$version}/firebase-app-compat.js');\n";
-		echo "importScripts('https://www.gstatic.com/firebasejs/{$version}/firebase-messaging-compat.js');\n";
+		// The Firebase SDK is BUNDLED with the plugin (assets/js/vendor/
+		// firebase, pinned to FIREBASE_JS_VERSION) so neither the service
+		// worker nor the page loads executable code from external servers
+		// (WordPress.org plugin guideline 8). See the vendor README for the
+		// upgrade procedure.
+		$sdk_base = BCSEND_PLUGIN_URL . 'assets/js/vendor/firebase';
+		echo "importScripts('" . esc_url_raw( $sdk_base . '/firebase-app-compat.js' ) . "');\n";
+		echo "importScripts('" . esc_url_raw( $sdk_base . '/firebase-messaging-compat.js' ) . "');\n";
 		echo "firebase.initializeApp({$config});\n";
 		echo <<<'JS'
 const messaging = firebase.messaging();
@@ -183,10 +190,12 @@ JS;
 			array(
 				'firebaseConfig' => json_decode( self::get_web_config_json(), true ),
 				'vapidKey'       => (string) $settings['firebase_vapid_key'],
-				'sdkVersion'     => self::FIREBASE_JS_VERSION,
+				'sdkBase'        => BCSEND_PLUGIN_URL . 'assets/js/vendor/firebase',
 				'swUrl'          => home_url( '/?bcsend_push_sw=1' ),
 				'restUrl'        => esc_url_raw( rest_url( 'bcsend/v1/devices' ) ),
 				'restNonce'      => is_user_logged_in() ? wp_create_nonce( 'wp_rest' ) : '',
+				'userId'         => get_current_user_id(),
+				'siteKey'        => md5( home_url( '/' ) ),
 				'labels'         => array(
 					'subscribe'   => __( 'Enable notifications', 'beacon-campaign-sender' ),
 					'subscribed'  => __( 'Notifications on', 'beacon-campaign-sender' ),

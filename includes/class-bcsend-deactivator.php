@@ -72,7 +72,8 @@ class Bcsend_Deactivator {
 		wp_clear_scheduled_hook( Bcsend_Subscriber_Ingest::RETRY_HOOK );
 		wp_clear_scheduled_hook( 'bcsend_standalone_push' );
 		wp_clear_scheduled_hook( 'bcsend_standalone_push_batch' );
-		wp_clear_scheduled_hook( 'bcsend_run_ai_job' );
+		wp_unschedule_hook( 'bcsend_run_ai_job' ); // Same: single events are scheduled with the job ID argument.
+		wp_unschedule_hook( 'bcsend_recover_openai_job' ); // Events carry args; wp_clear_scheduled_hook() with no args matches nothing.
 
 		// Flush rewrite rules.
 		flush_rewrite_rules();

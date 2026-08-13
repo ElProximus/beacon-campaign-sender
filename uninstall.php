@@ -156,7 +156,8 @@ function bcsend_uninstall_current_site() {
 	wp_clear_scheduled_hook( 'bcsend_subscriber_retry_pending' );
 	wp_clear_scheduled_hook( 'bcsend_standalone_push' );
 	wp_clear_scheduled_hook( 'bcsend_standalone_push_batch' );
-	wp_clear_scheduled_hook( 'bcsend_run_ai_job' );
+	wp_unschedule_hook( 'bcsend_run_ai_job' ); // Same: scheduled with the job ID argument.
+	wp_unschedule_hook( 'bcsend_recover_openai_job' ); // Events carry args; the no-arg clear matches nothing.
 }
 
 if ( is_multisite() ) {

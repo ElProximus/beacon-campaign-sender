@@ -30,7 +30,8 @@ class Bcsend_Ai_Job_Runner {
 	/**
 	 * Scheduler hook for the cron/Action Scheduler backstop.
 	 */
-	const HOOK = 'bcsend_run_ai_job';
+	const HOOK          = 'bcsend_run_ai_job';
+	const RECOVERY_HOOK = 'bcsend_recover_openai_job';
 
 	/**
 	 * Provider HTTP timeout for background workers, in seconds.
@@ -52,8 +53,51 @@ class Bcsend_Ai_Job_Runner {
 	 */
 	public function register() {
 		add_action( self::HOOK, array( $this, 'run_scheduled' ) );
+		add_action( self::RECOVERY_HOOK, array( $this, 'run_recovery_scheduled' ), 10, 2 );
 		add_action( 'wp_ajax_bcsend_ai_job_run', array( $this, 'handle_kick' ) );
 		add_action( 'wp_ajax_nopriv_bcsend_ai_job_run', array( $this, 'handle_kick' ) );
+	}
+
+	/**
+	 * Schedule a GET-only recovery check for an accepted OpenAI response.
+	 *
+	 * @param int      $job_id Job ID.
+	 * @param int|null $delay  Seconds before the check.
+	 * @return bool Whether a check is scheduled or already pending.
+	 */
+	public static function schedule_recovery( $job_id, $delay = null ) {
+		$job = Bcsend_Ai_Jobs::get( (int) $job_id );
+		if ( ! $job || 'openai' !== $job->provider || empty( $job->provider_job_id ) || ! in_array( $job->status, array( 'submitted', 'uncertain' ), true ) ) {
+			return false;
+		}
+
+		if ( in_array( $job->error_code, array( 'recovery_exhausted', 'recovery_deadline_expired' ), true ) ) {
+			return false;
+		}
+
+		if ( Bcsend_Ai_Jobs::age( $job ) >= Bcsend_Ai_Jobs::RECOVERY_WINDOW_SECONDS ) {
+			if ( 'uncertain' === $job->status ) {
+				Bcsend_Ai_Jobs::mark_recovery_exhausted(
+					$job->id,
+					'recovery_deadline_expired',
+					__( 'Beacon could not recover the accepted OpenAI response within 24 hours. Review your OpenAI activity before generating again.', 'beacon-campaign-sender' )
+				);
+			}
+			return false;
+		}
+
+		$delay = null === $delay ? Bcsend_Ai_Jobs::RECOVERY_RETRY_SECONDS : max( 1, (int) $delay );
+		if ( 'submitted' === $job->status && ! empty( $job->lease_expires_at ) ) {
+			$lease_delay = strtotime( $job->lease_expires_at . ' UTC' ) - time() + 1;
+			$delay       = max( $delay, $lease_delay );
+		}
+
+		$args = array( (int) $job->id, (string) $job->runner_token );
+		if ( wp_next_scheduled( self::RECOVERY_HOOK, $args ) ) {
+			return true;
+		}
+
+		return (bool) wp_schedule_single_event( time() + $delay, self::RECOVERY_HOOK, $args );
 	}
 
 	/**
@@ -133,6 +177,119 @@ class Bcsend_Ai_Job_Runner {
 
 		if ( $job ) {
 			$this->run( $job );
+		}
+	}
+
+	/**
+	 * WP-Cron recovery entry point for an already-accepted OpenAI response.
+	 *
+	 * @param int    $job_id       Job ID.
+	 * @param string $runner_token Recovery authority.
+	 * @return void
+	 */
+	public function run_recovery_scheduled( $job_id, $runner_token ) {
+		$job = Bcsend_Ai_Jobs::get( absint( $job_id ) );
+		if ( ! $job || '' === (string) $runner_token || ! hash_equals( (string) $job->runner_token, (string) $runner_token ) ) {
+			return;
+		}
+
+		self::recover_provider_result( $job );
+		self::schedule_recovery( (int) $job_id, Bcsend_Ai_Jobs::RECOVERY_RETRY_SECONDS );
+	}
+
+	/**
+	 * Recover one OpenAI response with a billing-safe GET.
+	 *
+	 * A named lock prevents browser polling and WP-Cron from ingesting the
+	 * same provider response concurrently.
+	 *
+	 * @param object $job Job row.
+	 * @return string completed|pending|exhausted|deferred|ineligible
+	 */
+	public static function recover_provider_result( $job ) {
+		if ( ! $job || 'openai' !== $job->provider || empty( $job->provider_job_id ) || ! in_array( $job->status, array( 'submitted', 'uncertain' ), true ) ) {
+			return 'ineligible';
+		}
+
+		if ( Bcsend_Ai_Jobs::age( $job ) >= Bcsend_Ai_Jobs::RECOVERY_WINDOW_SECONDS ) {
+			if ( 'submitted' === $job->status ) {
+				Bcsend_Ai_Jobs::sweep_uncertain( (int) $job->id );
+			}
+			Bcsend_Ai_Jobs::mark_recovery_exhausted(
+				(int) $job->id,
+				'recovery_deadline_expired',
+				__( 'Beacon could not recover the accepted OpenAI response within 24 hours. Review your OpenAI activity before generating again.', 'beacon-campaign-sender' )
+			);
+			return 'exhausted';
+		}
+
+		if ( in_array( $job->error_code, array( 'recovery_exhausted', 'recovery_deadline_expired' ), true ) ) {
+			return 'exhausted';
+		}
+
+		if ( 'submitted' === $job->status ) {
+			$lease_expired = ! empty( $job->lease_expires_at ) && strtotime( $job->lease_expires_at . ' UTC' ) < time();
+			if ( ! $lease_expired ) {
+				self::schedule_recovery( $job->id );
+				return 'deferred';
+			}
+			Bcsend_Ai_Jobs::sweep_uncertain( (int) $job->id );
+			$job = Bcsend_Ai_Jobs::get( (int) $job->id );
+		}
+
+		if ( ! Bcsend_Ai_Jobs::is_openai_recovery_pending( $job ) ) {
+			return 'ineligible';
+		}
+
+		global $wpdb;
+		$mutex_name = 'bcsend_ai_recover_' . (int) $job->id;
+		$locked     = 1 === (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $mutex_name ) );
+		if ( ! $locked ) {
+			self::schedule_recovery( $job->id, Bcsend_Ai_Jobs::RECOVERY_RETRY_SECONDS );
+			return 'deferred';
+		}
+
+		try {
+			$job = Bcsend_Ai_Jobs::get( (int) $job->id );
+			if ( ! Bcsend_Ai_Jobs::is_openai_recovery_pending( $job ) ) {
+				return 'ineligible';
+			}
+			if ( ! Bcsend_Ai_Jobs::claim_recovery( $job->id ) ) {
+				self::schedule_recovery( $job->id, Bcsend_Ai_Jobs::RECOVERY_RETRY_SECONDS );
+				return 'deferred';
+			}
+
+			$client   = new Bcsend_OpenAI_API();
+			$recovery = $client->fetch_background_response( $job->provider_job_id );
+
+			if ( 'pending' === $recovery['status'] ) {
+				self::schedule_recovery( $job->id, Bcsend_Ai_Jobs::RECOVERY_RETRY_SECONDS );
+				return 'pending';
+			}
+
+			if ( 'completed' !== $recovery['status'] || '' === $recovery['text'] ) {
+				Bcsend_Ai_Jobs::mark_recovery_exhausted( (int) $job->id );
+				return 'exhausted';
+			}
+
+			$result = Bcsend_AI_Service::shape_recovered_result( $job->job_type, $recovery['text'] );
+			if ( empty( $result ) ) {
+				Bcsend_Ai_Jobs::mark_recovery_exhausted( (int) $job->id );
+				return 'exhausted';
+			}
+
+			if ( Bcsend_Ai_Jobs::complete_recovered( (int) $job->id, $result ) ) {
+				Bcsend_Logger::log( 'ai', sprintf( 'AI job %d recovered from OpenAI response %s after worker loss.', $job->id, $job->provider_job_id ) );
+				return 'completed';
+			}
+
+			return 'ineligible';
+		} catch ( Throwable $throwable ) {
+			Bcsend_Logger::log( 'ai', 'OpenAI recovery for job ' . $job->id . ' stopped unexpectedly: ' . $throwable->getMessage(), '', 'error' );
+			self::schedule_recovery( $job->id, Bcsend_Ai_Jobs::RECOVERY_RETRY_SECONDS );
+			return 'pending';
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $mutex_name ) );
 		}
 	}
 
@@ -227,20 +384,22 @@ class Bcsend_Ai_Job_Runner {
 			return;
 		}
 
-		// Worker-side listeners for provider events during execution:
-		//  - a provider response ID (OpenAI background submit) is persisted to
-		//    the job row IMMEDIATELY, so a killed worker never loses the
-		//    pointer to a paid result;
-		//  - lease extensions fire when the provider interaction legitimately
-		//    restarts the clock (refusal fallback second call, each
-		//    successful background status poll).
+		/*
+		 * Worker-side listeners for provider events during execution:
+		 * - a provider response ID (OpenAI background submit) is persisted to
+		 *   the job row IMMEDIATELY, so a killed worker never loses the
+		 *   pointer to a paid result;
+		 * - lease extensions fire when the provider interaction legitimately
+		 *   restarts the clock (refusal fallback second call, each
+		 *   successful background status poll).
+		 */
 		// These listeners are scoped to THIS job only. Action Scheduler runs
 		// several actions per PHP request, so they must be removed the moment
 		// the job finishes - otherwise a later job's provider events would
 		// write onto this job's row.
 		$job_id = (int) $job->id;
 
-		$on_response_id = static function ( $response_id ) use ( $job_id ) {
+		$on_response_id  = static function ( $response_id ) use ( $job_id ) {
 			Bcsend_Ai_Jobs::record_provider_response( $job_id, $response_id );
 		};
 		$on_lease_extend = static function () use ( $job_id, $lock ) {
@@ -261,7 +420,12 @@ class Bcsend_Ai_Job_Runner {
 		} catch ( Throwable $e ) {
 			$detach_listeners();
 			Bcsend_Logger::log( 'ai', 'AI job ' . $job->id . ' crashed: ' . $e->getMessage(), '', 'error' );
-			Bcsend_Ai_Jobs::fail( (int) $job->id, $lock, 'exception', $e->getMessage() );
+			Bcsend_Ai_Jobs::mark_uncertain(
+				(int) $job->id,
+				$lock,
+				'worker_exception_ambiguous',
+				__( 'Beacon lost contact with the background worker after the provider request began. The request may have completed or been billed, so it was not submitted again.', 'beacon-campaign-sender' )
+			);
 			return;
 		}
 
@@ -285,11 +449,11 @@ class Bcsend_Ai_Job_Runner {
 		if ( is_wp_error( $result ) ) {
 			Bcsend_Logger::log( 'ai', 'AI job ' . $job->id . ' (' . $job->job_type . ') failed: ' . $result->get_error_message(), '', 'error' );
 
-			// A transport timeout is ambiguous - the provider may still have
-			// completed and billed the request - so the job becomes uncertain
-			// (never auto-retried) rather than failed.
-			if ( 'ai_timeout_ambiguous' === $result->get_error_code() ) {
-				Bcsend_Ai_Jobs::mark_uncertain( (int) $job->id, $lock, 'ai_timeout_ambiguous', $result->get_error_message() );
+			// A timeout or server failure after POST is ambiguous: the provider
+			// may still have completed and billed the request, so the job becomes
+			// uncertain (never auto-retried) rather than failed.
+			if ( in_array( $result->get_error_code(), array( 'ai_timeout_ambiguous', 'ai_generation_ambiguous' ), true ) ) {
+				Bcsend_Ai_Jobs::mark_uncertain( (int) $job->id, $lock, $result->get_error_code(), $result->get_error_message() );
 				return;
 			}
 

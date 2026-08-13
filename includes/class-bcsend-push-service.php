@@ -540,6 +540,73 @@ class Bcsend_Push_Service {
 		return $payload;
 	}
 
+	/**
+	 * Whether a transport error proves that the FCM connection was never made.
+	 *
+	 * Only failures that happen before a connection is established are safe to
+	 * retry. Every other transport failure may have happened after FCM accepted
+	 * the notification and must be treated as an ambiguous delivery.
+	 *
+	 * @param WP_Error $error Transport error from wp_remote_post().
+	 * @return bool True when retrying cannot duplicate a notification.
+	 */
+	private static function is_safe_preconnect_failure( $error ) {
+		$message = strtolower( $error->get_error_message() );
+		$markers = array(
+			'curl error 6',
+			'curl error 7',
+			'curl error 35',
+			'could not resolve',
+			'failed to connect',
+			'connection refused',
+		);
+
+		foreach ( $markers as $marker ) {
+			if ( false !== strpos( $message, $marker ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Format an FCM result whose delivery outcome cannot be known safely.
+	 *
+	 * @param string $message        Human-readable explanation.
+	 * @param string $fcm_response   Raw FCM response body, when available.
+	 * @param bool   $return_details Whether the caller requested a details array.
+	 * @param int    $status_code    HTTP status code, when available.
+	 * @return array|WP_Error Detailed result or WP_Error.
+	 */
+	private function ambiguous_delivery_result( $message, $fcm_response, $return_details, $status_code = 0 ) {
+		if ( $return_details ) {
+			return array(
+				'status'        => 'ambiguous',
+				'fcm_response'  => $fcm_response,
+				'error_message' => $message,
+			);
+		}
+
+		return new WP_Error(
+			'push_delivery_ambiguous',
+			$message,
+			array( 'status_code' => $status_code )
+		);
+	}
+
+	/**
+	 * Send a push notification to a single device token.
+	 *
+	 * @param string $token          FCM device token.
+	 * @param string $title          Notification title.
+	 * @param string $message        Notification body.
+	 * @param int    $user_id        Optional owning user, for badge counts.
+	 * @param string $link_url       Optional click-through URL.
+	 * @param bool   $return_details Whether to return a detailed result array.
+	 * @param string $platform       Device platform; 'web' switches to a data-only payload.
+	 * @return true|string|array|WP_Error True on success, invalid-token marker, details array, or WP_Error.
+	 */
 	public function send_single( $token, $title, $message, $user_id = 0, $link_url = '', $return_details = false, $platform = 'app' ) {
 		$access_token = $this->get_access_token();
 
@@ -595,7 +662,18 @@ class Bcsend_Push_Service {
 					'error'
 				);
 
-				continue;
+				if ( self::is_safe_preconnect_failure( $response ) ) {
+					continue;
+				}
+
+				return $this->ambiguous_delivery_result(
+					sprintf(
+						'Delivery outcome uncertain: FCM did not return a definitive response and may have accepted the notification, so Beacon did not resend it. Transport error: %s',
+						$response->get_error_message()
+					),
+					'',
+					$return_details
+				);
 			}
 
 			$code         = wp_remote_retrieve_response_code( $response );
@@ -703,15 +781,49 @@ class Bcsend_Push_Service {
 				);
 			}
 
-			// 5xx or other retryable errors.
-			$last_error = new WP_Error(
+			// Gateway timeouts and server failures may be returned after FCM
+			// accepted the notification. Without an idempotency key, resending
+			// automatically could produce a duplicate notification.
+			if ( 0 === $code || in_array( $code, array( 408, 504, 524 ), true ) || $code >= 500 ) {
+				return $this->ambiguous_delivery_result(
+					sprintf(
+						'Delivery outcome uncertain: FCM returned HTTP %d after the notification was submitted and may have accepted it, so Beacon did not resend it.',
+						$code
+					),
+					$raw_body,
+					$return_details,
+					$code
+				);
+			}
+
+			$api_message = isset( $decoded_body['error']['message'] )
+				? $decoded_body['error']['message']
+				: sprintf( 'FCM API returned HTTP %d', $code );
+			$api_error   = new WP_Error(
 				'push_api_error',
-				sprintf( 'FCM API returned HTTP %d', $code ),
+				sprintf( '%s (HTTP %d)', $api_message, $code ),
 				array(
 					'status_code' => $code,
 					'response'    => $decoded_body,
 				)
 			);
+
+			// HTTP 429 is an explicit rejection, so it is safe to retry. All
+			// other responses are definitive and should be returned immediately.
+			if ( 429 === $code ) {
+				$last_error = $api_error;
+				continue;
+			}
+
+			if ( $return_details ) {
+				return array(
+					'status'        => 'failed',
+					'fcm_response'  => $raw_body,
+					'error_message' => $api_error->get_error_message(),
+				);
+			}
+
+			return $api_error;
 		}
 
 		// All retries exhausted.
@@ -756,6 +868,7 @@ class Bcsend_Push_Service {
 				'total'           => 0,
 				'sent'            => 0,
 				'failed'          => 0,
+				'ambiguous'       => 0,
 				'invalid_cleaned' => 0,
 				'batches'         => 0,
 			);
@@ -780,6 +893,7 @@ class Bcsend_Push_Service {
 				'total'           => 0,
 				'sent'            => 0,
 				'failed'          => 0,
+				'ambiguous'       => 0,
 				'invalid_cleaned' => 0,
 				'batches'         => 0,
 			);
@@ -788,6 +902,7 @@ class Bcsend_Push_Service {
 		$total          = count( $tokens );
 		$sent           = 0;
 		$failed         = 0;
+		$ambiguous      = 0;
 		$invalid_tokens = array();
 		$batches        = array_chunk( $tokens, self::BATCH_SIZE );
 		$batch_count    = count( $batches );
@@ -802,8 +917,6 @@ class Bcsend_Push_Service {
 					++$failed;
 					$invalid_tokens[] = $token_row->device_token;
 				} elseif ( is_wp_error( $result ) ) {
-					$error_data = $result->get_error_data();
-
 					// Auth failure - abort entire send.
 					if ( 'push_auth_error' === $result->get_error_code() ) {
 						// Clean up any invalid tokens collected so far.
@@ -828,6 +941,9 @@ class Bcsend_Push_Service {
 					}
 
 					++$failed;
+					if ( 'push_delivery_ambiguous' === $result->get_error_code() ) {
+						++$ambiguous;
+					}
 				}
 			}
 		}
@@ -839,6 +955,7 @@ class Bcsend_Push_Service {
 			'total'           => $total,
 			'sent'            => $sent,
 			'failed'          => $failed,
+			'ambiguous'       => $ambiguous,
 			'invalid_cleaned' => $invalid_cleaned,
 			'batches'         => $batch_count,
 		);
@@ -1008,6 +1125,7 @@ class Bcsend_Push_Service {
 				'total'           => 0,
 				'sent'            => 0,
 				'failed'          => 0,
+				'ambiguous'       => 0,
 				'invalid_cleaned' => 0,
 			);
 		}
@@ -1015,6 +1133,7 @@ class Bcsend_Push_Service {
 		$total          = count( $tokens );
 		$sent           = 0;
 		$failed         = 0;
+		$ambiguous      = 0;
 		$invalid_tokens = array();
 
 		foreach ( $tokens as $row ) {
@@ -1050,6 +1169,9 @@ class Bcsend_Push_Service {
 				}
 
 				++$failed;
+				if ( 'push_delivery_ambiguous' === $result->get_error_code() ) {
+					++$ambiguous;
+				}
 			}
 		}
 
@@ -1061,6 +1183,7 @@ class Bcsend_Push_Service {
 			'total'           => $total,
 			'sent'            => $sent,
 			'failed'          => $failed,
+			'ambiguous'       => $ambiguous,
 			'invalid_cleaned' => $invalid_cleaned,
 		);
 

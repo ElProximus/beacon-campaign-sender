@@ -494,7 +494,7 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 						<?php if ( class_exists( 'Bcsend_Devices' ) ) : ?>
 							<code style="user-select: all;"><?php echo esc_html( Bcsend_Devices::get_app_key() ); ?></code>
 							<p class="description">
-								<?php esc_html_e( 'Custom mobile apps can register device tokens by POSTing {"token":"…","platform":"android"} to the URL below with this key in an X-Bcsend-App-Key header. Browser subscribers do not need it.', 'beacon-campaign-sender' ); ?><br />
+								<?php esc_html_e( 'Custom mobile apps can register device tokens by POSTing {"token":"…","platform":"android"} to the URL below with this key in an X-Bcsend-App-Key header. The app key alone registers an anonymous device for All Subscribers. To enable role or specific-user targeting, the same request must also use per-user WordPress REST authentication recognized by your site (for example an Application Password, JWT, or OAuth); Beacon never trusts a submitted user ID. On app logout, POST the same token with "release_owner":true or DELETE it. Browser subscribers handle login and logout ownership automatically.', 'beacon-campaign-sender' ); ?><br />
 								<code><?php echo esc_url( rest_url( 'bcsend/v1/devices' ) ); ?></code>
 							</p>
 						<?php endif; ?>

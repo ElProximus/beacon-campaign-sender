@@ -107,6 +107,16 @@ if ( ! empty( $social_posts ) ) {
 		<input type="hidden" id="bcsend-template-id" value="<?php echo esc_attr( $template_id ); ?>" />
 	<?php endif; ?>
 
+	<div id="bcsend-ai-composer-lock" class="bcsend-ai-composer-lock" hidden>
+		<span class="dashicons dashicons-update" aria-hidden="true"></span>
+		<span id="bcsend-ai-composer-lock-message" role="status" aria-live="polite">
+			<?php esc_html_e( 'AI is generating. Editing and sending are temporarily paused.', 'beacon-campaign-sender' ); ?>
+		</span>
+		<button type="button" class="button" id="bcsend-cancel-ai-generation">
+			<?php esc_html_e( 'Cancel generation', 'beacon-campaign-sender' ); ?>
+		</button>
+	</div>
+
 	<div class="bcsend-panels">
 
 		<!-- Left Panel: Email Preview + HTML Editor (split view) -->

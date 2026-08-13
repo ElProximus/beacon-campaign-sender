@@ -36,7 +36,9 @@ class Bcsend_Ai_Jobs {
 	/**
 	 * Job rows older than this many days are purged opportunistically.
 	 */
-	const RETENTION_DAYS = 30;
+	const RETENTION_DAYS          = 30;
+	const RECOVERY_WINDOW_SECONDS = DAY_IN_SECONDS;
+	const RECOVERY_RETRY_SECONDS  = 60;
 
 	/**
 	 * States in which a job is considered active (blocks duplicates).
@@ -114,7 +116,18 @@ class Bcsend_Ai_Jobs {
 			return new WP_Error( 'bcsend_job_insert_failed', __( 'Could not create the generation job.', 'beacon-campaign-sender' ) );
 		}
 
-		return self::get( (int) $wpdb->insert_id );
+		$job_id = (int) $wpdb->insert_id;
+		$fenced = self::supersede_older_results(
+			isset( $args['campaign_id'] ) ? absint( $args['campaign_id'] ) : 0,
+			sanitize_key( $args['job_type'] ),
+			$job_id
+		);
+		if ( false === $fenced ) {
+			$wpdb->delete( self::table(), array( 'id' => $job_id ), array( '%d' ) );
+			return new WP_Error( 'bcsend_job_fence_failed', __( 'Could not safely fence an earlier generation result.', 'beacon-campaign-sender' ) );
+		}
+
+		return self::get( $job_id );
 	}
 
 	/**
@@ -416,7 +429,7 @@ class Bcsend_Ai_Jobs {
 
 		$table = self::table();
 
-		return (bool) $wpdb->query(
+		$updated = (bool) $wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$table}
 				SET status = 'uncertain', error_code = %s, error_message = %s, heartbeat_at = %s
@@ -428,6 +441,12 @@ class Bcsend_Ai_Jobs {
 				$lock
 			)
 		);
+
+		if ( $updated ) {
+			Bcsend_Ai_Job_Runner::schedule_recovery( $id, self::RECOVERY_RETRY_SECONDS );
+		}
+
+		return $updated;
 	}
 
 	/**
@@ -475,7 +494,7 @@ class Bcsend_Ai_Jobs {
 
 		$table = self::table();
 
-		return (bool) $wpdb->query(
+		$updated = (bool) $wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$table}
 				SET status = 'uncertain',
@@ -487,6 +506,12 @@ class Bcsend_Ai_Jobs {
 				current_time( 'mysql', true )
 			)
 		);
+
+		if ( $updated ) {
+			Bcsend_Ai_Job_Runner::schedule_recovery( $id, self::RECOVERY_RETRY_SECONDS );
+		}
+
+		return $updated;
 	}
 
 	/**
@@ -561,6 +586,31 @@ class Bcsend_Ai_Jobs {
 	}
 
 	/**
+	 * Fence off older unresolved or undelivered results when a replacement is created.
+	 *
+	 * @param int    $campaign_id Campaign ID.
+	 * @param string $job_type    Generation type.
+	 * @param int    $new_job_id  Replacement job ID.
+	 * @return int|false Number of rows updated or false on error.
+	 */
+	public static function supersede_older_results( $campaign_id, $job_type, $new_job_id ) {
+		global $wpdb;
+		$table = self::table();
+
+		return $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'superseded', completed_at = %s
+				WHERE campaign_id = %d AND job_type = %s AND id < %d
+				AND status IN ('completed','uncertain')",
+				current_time( 'mysql', true ),
+				(int) $campaign_id,
+				sanitize_key( $job_type ),
+				(int) $new_job_id
+			)
+		);
+	}
+
+	/**
 	 * Record the provider-side response ID for a job.
 	 *
 	 * Stored as soon as a provider-native background submission is accepted,
@@ -573,13 +623,70 @@ class Bcsend_Ai_Jobs {
 	public static function record_provider_response( $id, $response_id ) {
 		global $wpdb;
 
-		$wpdb->update(
+		$updated = $wpdb->update(
 			self::table(),
 			array( 'provider_job_id' => sanitize_text_field( (string) $response_id ) ),
 			array( 'id' => absint( $id ) ),
 			array( '%s' ),
 			array( '%d' )
 		);
+
+		if ( false !== $updated ) {
+			Bcsend_Ai_Job_Runner::schedule_recovery( $id );
+		}
+	}
+
+	/**
+	 * Whether an uncertain OpenAI response remains eligible for GET recovery.
+	 *
+	 * @param object $job Job row.
+	 * @return bool
+	 */
+	public static function is_openai_recovery_pending( $job ) {
+		if ( ! $job || 'uncertain' !== $job->status || 'openai' !== $job->provider || empty( $job->provider_job_id ) ) {
+			return false;
+		}
+
+		if ( in_array( $job->error_code, array( 'recovery_exhausted', 'recovery_deadline_expired' ), true ) ) {
+			return false;
+		}
+
+		return self::age( $job ) < self::RECOVERY_WINDOW_SECONDS;
+	}
+
+	/**
+	 * Atomically throttle provider GET recovery attempts across cron and tabs.
+	 *
+	 * @param int $id Job ID.
+	 * @return bool Whether this request claimed the next recovery attempt.
+	 */
+	public static function claim_recovery( $id ) {
+		global $wpdb;
+
+		$cutoff = gmdate( 'Y-m-d H:i:s', time() - self::RECOVERY_RETRY_SECONDS );
+		$table  = self::table();
+
+		return 1 === $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET heartbeat_at = %s
+				WHERE id = %d AND status = 'uncertain' AND provider = 'openai'
+				AND provider_job_id <> '' AND error_code NOT IN ('recovery_exhausted','recovery_deadline_expired')
+				AND ( heartbeat_at IS NULL OR heartbeat_at <= %s )",
+				current_time( 'mysql', true ),
+				(int) $id,
+				$cutoff
+			)
+		);
+	}
+
+	/**
+	 * Job age in seconds.
+	 *
+	 * @param object $job Job row.
+	 * @return int
+	 */
+	public static function age( $job ) {
+		return max( 0, time() - (int) strtotime( $job->created_at . ' UTC' ) );
 	}
 
 	/**
@@ -590,17 +697,24 @@ class Bcsend_Ai_Jobs {
 	 * payload was unusable - outcomes that can never change. The original
 	 * error_message is kept (it still explains the uncertainty to the user).
 	 *
-	 * @param int $id Job ID.
+	 * @param int    $id      Job ID.
+	 * @param string $code    Terminal recovery code.
+	 * @param string $message Optional user-facing explanation.
 	 * @return void
 	 */
-	public static function mark_recovery_exhausted( $id ) {
+	public static function mark_recovery_exhausted( $id, $code = 'recovery_exhausted', $message = '' ) {
 		global $wpdb;
 
 		$table = self::table();
 
 		$wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$table} SET error_code = 'recovery_exhausted' WHERE id = %d AND status = 'uncertain'",
+				"UPDATE {$table} SET error_code = %s,
+					error_message = CASE WHEN %s <> '' THEN %s ELSE error_message END
+				WHERE id = %d AND status = 'uncertain'",
+				sanitize_key( $code ),
+				(string) $message,
+				(string) $message,
 				$id
 			)
 		);

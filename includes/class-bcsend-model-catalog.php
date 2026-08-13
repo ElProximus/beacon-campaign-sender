@@ -39,9 +39,9 @@ class Bcsend_Model_Catalog {
 		return array(
 			// -------------------------------------------------- Anthropic --
 			'claude-sonnet-5'           => array(
-				'label'      => __( 'Claude Sonnet 5 (Recommended)', 'beacon-campaign-sender' ),
+				'label'      => __( 'Claude Sonnet 5 (Fast & Economical)', 'beacon-campaign-sender' ),
 				'provider'   => 'anthropic',
-				'group'      => 'recommended',
+				'group'      => 'economical',
 				'thinking'   => 'adaptive',
 				'effort'     => array(
 					'campaign' => 'medium',
@@ -56,9 +56,9 @@ class Bcsend_Model_Catalog {
 				),
 			),
 			'claude-opus-5'             => array(
-				'label'      => __( 'Claude Opus 5 (Higher Quality)', 'beacon-campaign-sender' ),
+				'label'      => __( 'Claude Opus 5 (Recommended)', 'beacon-campaign-sender' ),
 				'provider'   => 'anthropic',
-				'group'      => 'premium',
+				'group'      => 'recommended',
 				'thinking'   => 'adaptive',
 				'effort'     => array(
 					'campaign' => 'medium',
@@ -225,7 +225,7 @@ class Bcsend_Model_Catalog {
 	 * @return string
 	 */
 	public static function default_model( $provider ) {
-		return 'openai' === $provider ? 'gpt-5.6-terra' : 'claude-sonnet-5';
+		return 'openai' === $provider ? 'gpt-5.6-terra' : 'claude-opus-5';
 	}
 
 	/**

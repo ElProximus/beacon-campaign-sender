@@ -22,7 +22,11 @@
             this.campaignId = $('#bcsend-campaign-id').val() || this.getUrlParam('campaign_id');
             this.templateId = $('#bcsend-template-id').val() || this.getUrlParam('template_id');
             this.aiJobs = {};
+            this.composerLocks = {};
+            this.composerLockMessage = '';
+            this.composerCancelPending = false;
             this.dirtyCounter = 0;
+            this.bindComposerLock();
             this.bindGenerate();
             this.bindFieldEvents();
             this.bindHtmlEditor();
@@ -46,6 +50,160 @@
             var self = this;
             $('.bcsend-panel-right, .bcsend-panel-left').on('input change', function() {
                 self.dirtyCounter++;
+            });
+        },
+
+        // One visible lock covers every composer control while a result is
+        // expected to apply automatically. Native disabled states handle form
+        // controls; the capture listener also blocks custom clickable cards.
+        bindComposerLock: function() {
+            var self = this;
+
+            $('#bcsend-cancel-ai-generation').on('click', function() {
+                self.cancelActiveAiJobs();
+            });
+
+            document.addEventListener('click', function(event) {
+                if (!self.isComposerLocked()) {
+                    return;
+                }
+
+                var $target = $(event.target);
+                if ($target.closest('#bcsend-ai-composer-lock, .bcsend-job-action').length) {
+                    return;
+                }
+
+                if ($target.closest('.bcsend-panels, .bcsend-composer-bottom-bar').length) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                }
+            }, true);
+        },
+
+        isComposerLocked: function() {
+            return Object.keys(this.composerLocks || {}).length > 0;
+        },
+
+        lockComposer: function(key) {
+            if (!key) {
+                return;
+            }
+
+            if (!this.isComposerLocked()) {
+                this.composerLockMessage = '';
+            }
+            this.composerLocks[key] = true;
+            this.refreshComposerLock();
+        },
+
+        unlockComposer: function(key) {
+            if (key && this.composerLocks[key]) {
+                delete this.composerLocks[key];
+            }
+            if (!this.isComposerLocked()) {
+                this.composerLockMessage = '';
+                this.composerCancelPending = false;
+            }
+            this.refreshComposerLock();
+        },
+
+        refreshComposerLock: function() {
+            var self = this;
+            var locked = this.isComposerLocked();
+            var $wrap = $('.bcsend-composer-wrap');
+            var $banner = $('#bcsend-ai-composer-lock');
+            var $controls = $('.bcsend-panels, .bcsend-composer-bottom-bar')
+                .find('input, textarea, select, button')
+                .not('.bcsend-job-action');
+
+            $wrap.toggleClass('is-ai-locked', locked).attr('aria-busy', locked ? 'true' : 'false');
+            $banner.prop('hidden', !locked);
+
+            if (locked) {
+                $controls.each(function() {
+                    var $control = $(this);
+                    if ('undefined' === typeof $control.data('bcsendAiWasDisabled')) {
+                        $control.data('bcsendAiWasDisabled', $control.prop('disabled'));
+                    }
+                    $control.prop('disabled', true);
+                });
+
+                $('#bcsend-ai-composer-lock-message').text(
+                    this.composerLockMessage || 'AI is generating. Editing and sending are temporarily paused.'
+                );
+
+                var cancellable = Object.keys(this.aiJobs || {}).some(function(token) {
+                    var state = self.aiJobs[token];
+                    return state && ('queued' === state.lastStatus || 'dispatching' === state.lastStatus);
+                });
+
+                $('#bcsend-cancel-ai-generation')
+                    .toggle(cancellable || this.composerCancelPending)
+                    .prop('disabled', this.composerCancelPending);
+                return;
+            }
+
+            $controls.each(function() {
+                var $control = $(this);
+                var wasDisabled = $control.data('bcsendAiWasDisabled');
+                if ('undefined' !== typeof wasDisabled) {
+                    $control.prop('disabled', !!wasDisabled);
+                    $control.removeData('bcsendAiWasDisabled');
+                }
+            });
+        },
+
+        cancelActiveAiJobs: function() {
+            var self = this;
+            var tokens = Object.keys(this.aiJobs || {}).filter(function(token) {
+                var state = self.aiJobs[token];
+                return state && ('queued' === state.lastStatus || 'dispatching' === state.lastStatus);
+            });
+
+            if (!tokens.length || this.composerCancelPending) {
+                return;
+            }
+
+            this.composerCancelPending = true;
+            this.composerLockMessage = 'Cancelling AI generation...';
+            this.refreshComposerLock();
+
+            var remaining = tokens.length;
+            var couldNotCancel = '';
+            var complete = function() {
+                remaining--;
+                if (remaining > 0) {
+                    return;
+                }
+
+                self.composerCancelPending = false;
+                if (self.isComposerLocked()) {
+                    self.composerLockMessage = couldNotCancel || 'AI is generating. Editing and sending are temporarily paused.';
+                }
+                self.refreshComposerLock();
+            };
+
+            tokens.forEach(function(token) {
+                var state = self.aiJobs[token];
+                var cfg = state ? self.aiJobTypeConfig(state.type) : null;
+
+                Bcsend.ajax('bcsend_ai_job_cancel', { job: token }, function(response) {
+                    if (response && response.success) {
+                        if (cfg) {
+                            Bcsend.loading($(cfg.buttonSel), false);
+                            self.inlineStatus(cfg.statusSel, 'Generation cancelled.', 'warning');
+                        }
+                        self.stopAiJob(token);
+                    } else {
+                        if (state) {
+                            state.lastStatus = 'submitted';
+                        }
+                        couldNotCancel = (response && response.data && response.data.message)
+                            ? response.data.message + ' Editing stays paused until the result is ready.'
+                            : 'The generation could not be cancelled. Editing stays paused until the result is ready.';
+                    }
+                    complete();
+                });
             });
         },
 
@@ -1325,13 +1483,16 @@
             var self = this;
             var cfg = this.aiJobTypeConfig(type);
             var $btn = $(cfg.buttonSel);
+            var startingLock = 'starting:' + type;
 
             // Capture edit state at click time, not at enqueue-response time -
             // anything typed after this click was not part of the job's input.
             var dirtyAtClick = this.dirtyCounter;
 
+            this.lockComposer(startingLock);
+            Bcsend.loading($btn, true);
+
             var enqueue = function() {
-                Bcsend.loading($btn, true);
                 self.inlineStatus(cfg.statusSel, 'Queued...');
 
                 var payload = $.extend({}, data, { job_type: type, campaign_id: self.campaignId || 0 });
@@ -1339,6 +1500,7 @@
                 Bcsend.ajax('bcsend_ai_job_enqueue', payload, function(response) {
                     if (!response.success || !response.data || !response.data.job) {
                         Bcsend.loading($btn, false);
+                        self.unlockComposer(startingLock);
                         var msg = (response.data && response.data.message) ? response.data.message : 'Could not start generation.';
                         self.inlineStatus(cfg.statusSel, msg, 'error');
                         return;
@@ -1351,8 +1513,11 @@
                         elapsed: 0,
                         dirtyAt: dirtyAtClick,
                         data: data,
-                        reviewOnly: inputMismatch
+                        reviewOnly: inputMismatch,
+                        status: response.data.status || 'queued',
+                        reviewMessage: inputMismatch ? 'An AI generation started with different campaign inputs is ready for review.' : ''
                     });
+                    self.unlockComposer(startingLock);
                 });
             };
 
@@ -1362,6 +1527,8 @@
             // orphan the result (and the server refuses campaign_id 0).
             if (!self.campaignId) {
                 self.saveDraftThen(enqueue, function(msg) {
+                    Bcsend.loading($btn, false);
+                    self.unlockComposer(startingLock);
                     self.inlineStatus(cfg.statusSel, msg, 'error');
                 });
             } else {
@@ -1405,20 +1572,25 @@
                 dirtyAt: ('undefined' !== typeof meta.dirtyAt) ? meta.dirtyAt : this.dirtyCounter,
                 data: meta.data || null,
                 reviewOnly: !!meta.reviewOnly,
-                lastStatus: 'queued',
+                reviewMessage: meta.reviewMessage || '',
+                lastStatus: meta.status || 'queued',
                 model: '',
                 paused: false,
                 timerId: null,
                 pollId: null
             };
             this.aiJobs[token] = state;
+            if (!state.reviewOnly) {
+                this.lockComposer(token);
+            }
             Bcsend.loading($btn, true);
 
             var label = function() {
                 var verbs = {
                     queued: 'Queued',
                     dispatching: 'Starting',
-                    submitted: state.model ? 'Generating with ' + state.model : 'Generating'
+                    submitted: state.model ? 'Generating with ' + state.model : 'Generating',
+                    uncertain: 'Recovering the accepted OpenAI response'
                 };
                 return (verbs[state.lastStatus] || 'Working') + ' - ' + self.formatJobElapsed(Date.now() - state.startMs);
             };
@@ -1432,8 +1604,8 @@
             }, 1000);
 
             var finish = function() {
-                self.stopAiJob(token);
                 Bcsend.loading($btn, false);
+                self.stopAiJob(token);
             };
 
             var schedulePoll = function() {
@@ -1457,6 +1629,7 @@
                     state.lastStatus = d.status;
                     state.model = d.model || '';
                     state.startMs = Date.now() - ((d.elapsed || 0) * 1000);
+                    self.refreshComposerLock();
 
                     if ('completed' === d.status) {
                         finish();
@@ -1471,8 +1644,35 @@
                     }
 
                     if ('uncertain' === d.status) {
+                        if (d.recovery_pending) {
+                            state.paused = true;
+                            state.reviewOnly = true;
+                            state.reviewMessage = 'The recovered AI result is ready. Review it before replacing the campaign.';
+                            self.unlockComposer(token);
+                            Bcsend.loading($btn, true);
+                            self.aiJobStatusActions(
+                                cfg.statusSel,
+                                'Recovering the OpenAI response that was already accepted. No new generation request is being sent.',
+                                'warning',
+                                [
+                                    {
+                                        label: 'Abandon recovery',
+                                        run: function() {
+                                            Bcsend.ajax('bcsend_ai_job_dismiss', { job: token }, function(dismissResponse) {
+                                                if (dismissResponse && dismissResponse.success) {
+                                                    finish();
+                                                    self.inlineStatus(cfg.statusSel, 'Recovery abandoned. Starting another generation may create another OpenAI charge.', 'warning');
+                                                }
+                                            });
+                                        }
+                                    }
+                                ]
+                            );
+                            schedulePoll();
+                            return;
+                        }
                         finish();
-                        self.inlineStatus(cfg.statusSel, (d.error_message || 'Beacon lost contact with the background worker.') + ' It was not retried automatically - you can generate again.', 'warning');
+                        self.inlineStatus(cfg.statusSel, (d.error_message || 'Beacon could not recover the accepted OpenAI response.') + ' Review your OpenAI activity before generating again.', 'warning');
                         return;
                     }
 
@@ -1484,6 +1684,10 @@
 
                     if (d.background_unavailable && state.data) {
                         state.paused = true;
+                        state.reviewOnly = true;
+                        state.reviewMessage = 'Foreground generation finished after the editor was unlocked. Review it before applying.';
+                        self.unlockComposer(token);
+                        Bcsend.loading($btn, true);
                         self.aiJobStatusActions(
                             cfg.statusSel,
                             'Background processing appears unavailable on this host.',
@@ -1499,7 +1703,7 @@
                                         Bcsend.ajax('bcsend_ai_job_cancel', { job: token }, function(cancelResponse) {
                                             if (cancelResponse && cancelResponse.success) {
                                                 self.stopAiJob(token);
-                                                self.runAiForeground(type, state.data);
+                                                self.runAiForeground(type, state.data, true);
                                                 return;
                                             }
                                             // Too late to cancel - the request was
@@ -1533,6 +1737,7 @@
             if (state.timerId) { window.clearInterval(state.timerId); }
             if (state.pollId) { window.clearTimeout(state.pollId); }
             delete this.aiJobs[token];
+            this.unlockComposer(token);
         },
 
         // Hand a finished job's result to the composer - immediately when the
@@ -1545,7 +1750,9 @@
             var result = d.result || {};
             var suffix = d.fallback_used ? ' (a fallback model completed this request).' : '';
             var dismiss = function() {
-                Bcsend.ajax('bcsend_ai_job_dismiss', { job: token }, function() {});
+                if (token) {
+                    Bcsend.ajax('bcsend_ai_job_dismiss', { job: token }, function() {});
+                }
             };
 
             if (!state.reviewOnly && state.dirtyAt === this.dirtyCounter) {
@@ -1557,9 +1764,9 @@
                 return;
             }
 
-            var message = state.reviewOnly
+            var message = (state.reviewMessage ? state.reviewMessage + suffix : '') || (state.reviewOnly
                 ? 'A generation finished while this campaign was closed.' + suffix
-                : 'Generation finished, but it used an earlier version of this campaign - you have edited it since.' + suffix;
+                : 'Generation finished, but it used an earlier version of this campaign - you have edited it since.' + suffix);
 
             this.aiJobStatusActions(
                 cfg.statusSel,
@@ -1586,19 +1793,32 @@
 
         // Explicit foreground fallback: the legacy synchronous endpoint,
         // chosen by the user when background execution is unavailable.
-        runAiForeground: function(type, data) {
+        runAiForeground: function(type, data, reviewOnly) {
             var self = this;
             var cfg = this.aiJobTypeConfig(type);
             var $btn = $(cfg.buttonSel);
+            var lockKey = 'foreground:' + type + ':' + Date.now();
 
+            this.lockComposer(lockKey);
             Bcsend.loading($btn, true);
             this.inlineStatus(cfg.statusSel, 'Generating in foreground - keep this tab open...');
 
             Bcsend.ajax(cfg.legacyAction, $.extend({}, data, { campaign_id: this.campaignId || '' }), function(response) {
                 Bcsend.loading($btn, false);
+                self.unlockComposer(lockKey);
 
                 if (response.success && response.data) {
-                    cfg.apply(response.data);
+                    if (reviewOnly) {
+                        self.deliverAiJobResult('', type, cfg, {
+                            reviewOnly: true,
+                            reviewMessage: 'Foreground generation is ready. Review it before replacing the campaign.'
+                        }, {
+                            result: response.data,
+                            fallback_used: !!response.data.fallback_used
+                        });
+                    } else {
+                        cfg.apply(response.data);
+                    }
                 } else {
                     var msg = (response.data && response.data.message) ? response.data.message : 'Generation failed.';
                     self.inlineStatus(cfg.statusSel, msg, 'error');
@@ -1618,15 +1838,19 @@
                     if (!cfg) { return; }
 
                     if ('uncertain' === job.status) {
-                        self.inlineStatus(cfg.statusSel, 'A previous generation lost contact with its background worker and was not retried automatically. You can generate again.', 'warning');
-                        return;
+                        if (!job.recovery_pending) {
+                            self.inlineStatus(cfg.statusSel, 'A previous generation could not be recovered. Review your OpenAI activity before generating again.', 'warning');
+                            return;
+                        }
                     }
 
                     // Completed while no composer was open: recover the paid
                     // result as an explicit review-and-apply offer.
                     self.watchAiJob(job.job, job.job_type, {
                         elapsed: job.elapsed || 0,
-                        reviewOnly: 'completed' === job.status
+                        reviewOnly: 'completed' === job.status || 'uncertain' === job.status,
+                        status: job.status,
+                        reviewMessage: 'uncertain' === job.status ? 'The recovered AI result is ready. Review it before replacing the campaign.' : ''
                     });
                 });
             });

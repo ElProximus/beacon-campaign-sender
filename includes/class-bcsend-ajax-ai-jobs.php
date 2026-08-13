@@ -155,7 +155,9 @@ class Bcsend_Ajax_Ai_Jobs {
 		// job is untouched (its lease/heartbeat proves it is alive) and still
 		// blocks below, as it should.
 		if ( $existing ) {
-			if ( ! $this->try_recover_provider_result( $existing ) ) {
+			if ( 'openai' === $existing->provider && ! empty( $existing->provider_job_id ) ) {
+				Bcsend_Ai_Job_Runner::recover_provider_result( $existing );
+			} else {
 				Bcsend_Ai_Jobs::sweep_uncertain( (int) $existing->id );
 			}
 
@@ -240,7 +242,9 @@ class Bcsend_Ajax_Ai_Jobs {
 		// OpenAI background job carries a provider-side response ID, and
 		// fetching it is a plain GET with no duplicate-generation or billing
 		// risk, so try to collect the finished result before giving up.
-		if ( ! $this->try_recover_provider_result( $job ) ) {
+		if ( 'openai' === $job->provider && ! empty( $job->provider_job_id ) ) {
+			Bcsend_Ai_Job_Runner::recover_provider_result( $job );
+		} else {
 			Bcsend_Ai_Jobs::sweep_uncertain( (int) $job->id );
 		}
 
@@ -277,8 +281,9 @@ class Bcsend_Ajax_Ai_Jobs {
 			$response['error_code']    = $job->error_code;
 			$response['error_message'] = $job->error_message;
 		} elseif ( 'uncertain' === $job->status ) {
-			$response['error_code']    = $job->error_code;
-			$response['error_message'] = $job->error_message;
+			$response['error_code']       = $job->error_code;
+			$response['error_message']    = $job->error_message;
+			$response['recovery_pending'] = Bcsend_Ai_Jobs::is_openai_recovery_pending( $job );
 		}
 
 		wp_send_json_success( $response );
@@ -322,82 +327,21 @@ class Bcsend_Ajax_Ai_Jobs {
 			if ( ! $this->user_owns_job( $job ) ) {
 				continue;
 			}
+			if ( 'openai' === $job->provider && ! empty( $job->provider_job_id ) && in_array( $job->status, array( 'submitted', 'uncertain' ), true ) ) {
+				Bcsend_Ai_Job_Runner::recover_provider_result( $job );
+				$job = Bcsend_Ai_Jobs::get( (int) $job->id );
+			}
 
 			$out[] = array(
-				'job'      => $job->public_token,
-				'job_type' => $job->job_type,
-				'status'   => $job->status,
-				'elapsed'  => $this->job_age( $job ),
+				'job'              => $job->public_token,
+				'job_type'         => $job->job_type,
+				'status'           => $job->status,
+				'elapsed'          => $this->job_age( $job ),
+				'recovery_pending' => Bcsend_Ai_Jobs::is_openai_recovery_pending( $job ),
 			);
 		}
 
 		wp_send_json_success( array( 'jobs' => $out ) );
-	}
-
-	/**
-	 * Attempt to recover a finished provider-side result for a job.
-	 *
-	 * Applies to OpenAI background jobs that recorded a response ID: if the
-	 * worker died mid-poll, the generation may have completed (and been
-	 * billed) at the provider. Retrieving it is billing-safe. Anthropic jobs
-	 * have no resumable provider-side ID and keep the uncertain path.
-	 *
-	 * @param object $job Job row.
-	 * @return bool True when the job was completed from a recovered result.
-	 */
-	private function try_recover_provider_result( $job ) {
-		if ( 'openai' !== $job->provider || empty( $job->provider_job_id ) ) {
-			return false;
-		}
-
-		if ( ! in_array( $job->status, array( 'submitted', 'uncertain' ), true ) ) {
-			return false;
-		}
-
-		// A previous attempt got a definitive dead answer from the provider
-		// (response failed, or unusable payload) - that can never change, so
-		// stop making a 30s-timeout outbound call on every poll for the rest
-		// of the job's 30-day retention.
-		if ( 'recovery_exhausted' === $job->error_code ) {
-			return false;
-		}
-
-		// Only once the job is actually overdue - a healthy in-flight job
-		// keeps polling normally.
-		$lease_expired = ! empty( $job->lease_expires_at ) && strtotime( $job->lease_expires_at . ' UTC' ) < time();
-
-		if ( 'submitted' === $job->status && ! $lease_expired ) {
-			return false;
-		}
-
-		$client   = new Bcsend_OpenAI_API();
-		$recovery = $client->fetch_background_response( $job->provider_job_id );
-
-		// 'pending' (still running, or a transient fetch error) stays
-		// retryable. A definitive provider 'failed', or a completed response
-		// with no usable text, is final.
-		if ( 'completed' !== $recovery['status'] || '' === $recovery['text'] ) {
-			if ( 'pending' !== $recovery['status'] ) {
-				Bcsend_Ai_Jobs::mark_recovery_exhausted( (int) $job->id );
-			}
-			return false;
-		}
-
-		$result = Bcsend_AI_Service::shape_recovered_result( $job->job_type, $recovery['text'] );
-
-		if ( empty( $result ) ) {
-			// The provider's completed payload cannot be shaped into a usable
-			// result - definitive, never re-fetch it.
-			Bcsend_Ai_Jobs::mark_recovery_exhausted( (int) $job->id );
-			return false;
-		}
-
-		if ( Bcsend_Ai_Jobs::complete_recovered( (int) $job->id, $result ) ) {
-			Bcsend_Logger::log( 'ai', sprintf( 'AI job %d recovered from OpenAI response %s after worker loss.', $job->id, $job->provider_job_id ) );
-			return true;
-		}
-
-		return false;
 	}
 
 	/**

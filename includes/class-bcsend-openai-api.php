@@ -192,9 +192,6 @@ class Bcsend_OpenAI_API {
 
 			// Timeout-family responses are ambiguous: an intermediary may
 			// have stopped waiting after OpenAI accepted the generation.
-			// Never submit a duplicate automatically. The deliberate residual
-			// tradeoff is that 500/502/503 remain retryable below even though
-			// a late intermediary failure can rarely be ambiguous too.
 			if ( in_array( $code, array( 408, 504, 524 ), true ) ) {
 				return new WP_Error(
 					'ai_timeout_ambiguous',
@@ -203,26 +200,32 @@ class Bcsend_OpenAI_API {
 				);
 			}
 
-			if ( in_array( $code, array( 400, 401, 403, 404 ), true ) ) {
-				$error_message = isset( $decoded_body['error']['message'] ) ? $decoded_body['error']['message'] : 'OpenAI API error';
+			// A provider or gateway 5xx can arrive after generation was
+			// accepted. Without provider idempotency, another POST is unsafe.
+			if ( 0 === $code || $code >= 500 ) {
 				return new WP_Error(
-					'openai_api_error',
-					sprintf( '%s (HTTP %d)', $error_message, $code ),
-					array(
-						'status_code' => $code,
-						'response'    => $decoded_body,
-					)
+					'ai_generation_ambiguous',
+					__( 'OpenAI returned a server error after the generation request was sent. It may still have completed and been billed, so it was not submitted again.', 'beacon-campaign-sender' ),
+					array( 'status_code' => $code )
 				);
 			}
 
-			$last_error = new WP_Error(
+			$error_message = isset( $decoded_body['error']['message'] ) ? $decoded_body['error']['message'] : 'OpenAI API error';
+			$api_error     = new WP_Error(
 				'openai_api_error',
-				sprintf( 'OpenAI API returned HTTP %d', $code ),
+				sprintf( '%s (HTTP %d)', $error_message, $code ),
 				array(
 					'status_code' => $code,
 					'response'    => $decoded_body,
 				)
 			);
+
+			// HTTP 429 is an explicit rejection, so a delayed retry cannot
+			// duplicate provider work. Other HTTP responses are returned now.
+			if ( 429 !== $code ) {
+				return $api_error;
+			}
+			$last_error = $api_error;
 		}
 
 		if ( ! is_wp_error( $last_error ) ) {

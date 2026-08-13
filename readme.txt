@@ -22,11 +22,11 @@ Beacon Campaign Sender brings campaign management that usually takes three or fo
 - **Audience management & segmentation** — organize contacts, sync Brevo lists, and target the right people.
 - **Mobile push notifications** — deliver to devices through Firebase Cloud Messaging.
 - **Social publishing with Zernio** — post to 12+ platforms from the same composer.
-- **AI-assisted drafting** — generate and refine campaign content with the latest Claude (Opus 4.8, Sonnet 4.6) and OpenAI (GPT-5.5) models.
+- **AI-assisted drafting** — generate and refine campaign content with the latest Claude (Opus 5, Sonnet 5, Fable 5) and OpenAI (GPT-5.6) models, running as reliable background jobs.
 - **Brand voice control** — keep every AI draft sounding like you.
 - **Newsletter signup forms** — drop a form on any page with a shortcode, or build your own with custom HTML.
 - **WordPress email routing (optional)** — route all of your site's `wp_mail()` traffic through Brevo, replacing a separate SMTP plugin.
-- **Privacy-friendly** — subscriber and log data is stored locally and integrates with WordPress personal-data exporters and erasers.
+- **Privacy-friendly** — subscriber, log, AI-job, and push-device data is stored locally (AI job records auto-delete after 30 days) and integrates with WordPress personal-data exporters and erasers.
 
 One dashboard, every channel, no glue code — so you can spend your time on the message, not the plumbing.
 
@@ -119,6 +119,8 @@ Data sent:
 - prompts entered by administrators
 - selected post, product, image, or campaign context included in the generation request
 
+Data stored by the service: generations run in OpenAI's background mode, which stores the request and response on OpenAI's servers (normally for at least 30 days; Zero Data Retention accounts store background responses for roughly ten minutes to enable polling) so interrupted results can be recovered.
+
 Service provider: OpenAI
 Service URL: https://openai.com/
 Privacy policy: https://openai.com/policies/privacy-policy/
@@ -181,7 +183,8 @@ The plugin integrates with WordPress personal data exporters and erasers for loc
 = 1.1.0 =
 **AI generation**
 - Generation now runs as a tracked background job instead of one long browser request: a live status with elapsed time, survives page reloads and closed tabs (results finished while you were away are offered as Apply/Discard), never runs the same job twice, and protects newer edits from being overwritten by a late result.
-- New AI models: Claude Sonnet 5 (recommended), Opus 5, and Fable 5 (premium, opt-in) with previous Claude models under Legacy; OpenAI GPT-5.6 Terra (recommended), Sol, and Luna running in OpenAI's server-side background mode. Existing installs keep their saved model.
+- The campaign composer now pauses editing and delivery controls while an AI result is expected to apply automatically. If OpenAI recovery or a fallback decision takes over, editing unlocks and the eventual result requires Apply/Discard.
+- New AI models: Claude Opus 5 (recommended), Sonnet 5 (fast and economical), and Fable 5 (premium, opt-in) with previous Claude models under Legacy; OpenAI GPT-5.6 Terra (recommended), Sol, and Luna running in OpenAI's server-side background mode. Existing installs keep their saved model.
 - If Fable 5's stricter safety system declines an ordinary request, Beacon retries once on Opus 5 and labels the result honestly (on by default, refusals only - never errors or timeouts).
 - Interrupted OpenAI generations are recovered from OpenAI's servers instead of abandoning an already-billed result; gateway timeouts (HTTP 408/504/524) are never retried automatically, so a slow generation can no longer be billed twice.
 - A generation can no longer be started for a deleted or already-sent campaign, and a dead background job can no longer block a campaign for other users.
@@ -199,6 +202,7 @@ The plugin integrates with WordPress personal data exporters and erasers for loc
 
 **Push notifications**
 - Push works without any companion app: web push via Firebase (service worker, subscribe button or floating bell), Firebase Topics for existing apps, token import, and an open registration endpoint for custom apps with an app-key path.
+- Custom-app device ownership now requires per-user WordPress REST authentication; the shared app key alone can register only an anonymous All Subscribers device. Anonymous browser token refreshes no longer erase a known owner, and browser logout explicitly releases the association on shared devices.
 - Device registry with per-IP throttling and a capacity cap that counts only active devices; dead tokens are cleaned up automatically after 30 days, and a Remove Stale Devices button frees capacity immediately.
 - Test Push is implemented for Firebase-only sites; pushes stuck mid-send recover automatically and can be deleted; Firebase topic names are no longer silently lowercased.
 

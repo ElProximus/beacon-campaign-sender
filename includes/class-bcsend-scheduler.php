@@ -484,6 +484,7 @@ class Bcsend_Scheduler {
 
 		$sent            = is_array( $result ) && isset( $result['sent'] ) ? (int) $result['sent'] : 0;
 		$failed          = is_array( $result ) && isset( $result['failed'] ) ? (int) $result['failed'] : 0;
+		$ambiguous       = is_array( $result ) && isset( $result['ambiguous'] ) ? (int) $result['ambiguous'] : 0;
 		$invalid_cleaned = is_array( $result ) && isset( $result['invalid_cleaned'] ) ? (int) $result['invalid_cleaned'] : 0;
 
 		Bcsend_Logger::log(
@@ -496,6 +497,7 @@ class Bcsend_Scheduler {
 					'total'           => count( $tokens ),
 					'sent'            => $sent,
 					'failed'          => $failed,
+					'ambiguous'       => $ambiguous,
 					'invalid_cleaned' => $invalid_cleaned,
 				)
 			)

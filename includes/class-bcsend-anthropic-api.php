@@ -119,10 +119,10 @@ class Bcsend_Anthropic_API {
 	}
 
 	/**
-	 * Send a request to the Anthropic Messages API with retry logic.
+	 * Send a request to the Anthropic Messages API with billing-safe retries.
 	 *
-	 * Retries up to 3 times for 5xx errors and timeouts with exponential backoff.
-	 * Does not retry 400, 401, 403, or 404 responses.
+	 * Retries only explicit rate-limit rejection and failures that happened
+	 * before a provider connection existed. Ambiguous POST outcomes never retry.
 	 *
 	 * @since 1.0.0
 	 *
@@ -275,9 +275,6 @@ class Bcsend_Anthropic_API {
 
 			// Timeout-family responses are ambiguous: an intermediary may
 			// have stopped waiting after Anthropic accepted the generation.
-			// Never submit a duplicate automatically. The deliberate residual
-			// tradeoff is that 500/502/503/529 remain retryable below even
-			// though a late intermediary failure can rarely be ambiguous too.
 			if ( in_array( $code, array( 408, 504, 524 ), true ) ) {
 				return new WP_Error(
 					'ai_timeout_ambiguous',
@@ -286,31 +283,50 @@ class Bcsend_Anthropic_API {
 				);
 			}
 
-			// Non-retryable client errors.
-			if ( in_array( $code, array( 400, 401, 403, 404 ), true ) ) {
-				$error_message = isset( $decoded_body['error']['message'] )
-					? $decoded_body['error']['message']
-					: 'Anthropic API error';
-
-				return new WP_Error(
+			// HTTP 529 (overloaded) and 500 (api_error) are documented by
+			// Anthropic as retry-safe rejections issued before generation
+			// starts - not billed, so a delayed retry cannot duplicate work.
+			if ( in_array( $code, array( 500, 529 ), true ) ) {
+				$last_error = new WP_Error(
 					'anthropic_api_error',
-					sprintf( '%s (HTTP %d)', $error_message, $code ),
+					sprintf( 'Anthropic API returned HTTP %d', $code ),
 					array(
 						'status_code' => $code,
 						'response'    => $decoded_body,
 					)
 				);
+				continue;
 			}
 
-			// 5xx or other retryable errors.
-			$last_error = new WP_Error(
+			// Other provider or gateway 5xx (and code 0 after connect) can
+			// arrive after generation was accepted. Without provider
+			// idempotency, another POST is unsafe.
+			if ( 0 === $code || $code >= 500 ) {
+				return new WP_Error(
+					'ai_generation_ambiguous',
+					__( 'Anthropic returned a server error after the generation request was sent. It may still have completed and been billed, so it was not submitted again.', 'beacon-campaign-sender' ),
+					array( 'status_code' => $code )
+				);
+			}
+
+			$error_message = isset( $decoded_body['error']['message'] )
+				? $decoded_body['error']['message']
+				: 'Anthropic API error';
+			$api_error     = new WP_Error(
 				'anthropic_api_error',
-				sprintf( 'Anthropic API returned HTTP %d', $code ),
+				sprintf( '%s (HTTP %d)', $error_message, $code ),
 				array(
 					'status_code' => $code,
 					'response'    => $decoded_body,
 				)
 			);
+
+			// HTTP 429 is an explicit rejection, so a delayed retry cannot
+			// duplicate provider work. Other HTTP responses are returned now.
+			if ( 429 !== $code ) {
+				return $api_error;
+			}
+			$last_error = $api_error;
 		}
 
 		// All retries exhausted.

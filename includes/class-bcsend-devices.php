@@ -55,6 +55,7 @@ class Bcsend_Devices {
 	 */
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
+		add_action( 'wp_logout', array( __CLASS__, 'release_web_owner_on_logout' ), 10, 1 );
 		add_action( 'wp_ajax_bcsend_import_push_tokens', array( __CLASS__, 'ajax_import_tokens' ) );
 		add_action( 'wp_ajax_bcsend_purge_stale_devices', array( __CLASS__, 'ajax_purge_stale_devices' ) );
 	}
@@ -63,8 +64,8 @@ class Bcsend_Devices {
 	 * REST routes: public device registration/deregistration.
 	 *
 	 * The registration route is deliberately public - anonymous web visitors
-	 * subscribe to push without an account, and external apps register their
-	 * users' tokens. A token is an opaque write-only credential here: the
+	 * subscribe to push without an account, and external apps register device
+	 * tokens. A token is an opaque write-only credential here: the
 	 * route stores nothing else, responds identically whether the token was
 	 * new or known, and never reads data back out.
 	 *
@@ -80,13 +81,17 @@ class Bcsend_Devices {
 					'callback'            => array( __CLASS__, 'rest_register_device' ),
 					'permission_callback' => '__return_true',
 					'args'                => array(
-						'token'    => array(
+						'token'         => array(
 							'required' => true,
 							'type'     => 'string',
 						),
-						'platform' => array(
+						'platform'      => array(
 							'required' => false,
 							'type'     => 'string',
+						),
+						'release_owner' => array(
+							'required' => false,
+							'type'     => 'boolean',
 						),
 					),
 				),
@@ -124,8 +129,9 @@ class Bcsend_Devices {
 	 * @return WP_REST_Response
 	 */
 	public static function rest_register_device( $request ) {
-		$token    = self::sanitize_token( $request->get_param( 'token' ) );
-		$platform = sanitize_key( (string) $request->get_param( 'platform' ) );
+		$token         = self::sanitize_token( $request->get_param( 'token' ) );
+		$platform      = sanitize_key( (string) $request->get_param( 'platform' ) );
+		$release_owner = rest_sanitize_boolean( $request->get_param( 'release_owner' ) );
 
 		if ( '' === $token ) {
 			return new WP_REST_Response( array( 'ok' => false ), 400 );
@@ -146,25 +152,40 @@ class Bcsend_Devices {
 			);
 		}
 
-		if ( self::at_capacity() ) {
+		if ( ! in_array( $platform, self::$platforms, true ) ) {
+			$platform = 'app';
+		}
+
+		// The shared app key is deliberately NOT user authentication. It only
+		// identifies an allowed app and lifts the anonymous rate limit. A user
+		// is attached only when WordPress authenticated this exact REST request
+		// (cookie + nonce, Application Password, JWT, OAuth, etc.). An ordinary
+		// anonymous refresh preserves any known owner; release_owner is the
+		// explicit logout/shared-device signal that clears it.
+		$user_id    = $release_owner ? 0 : get_current_user_id();
+		$registered = self::register( $token, $platform, $user_id, $release_owner );
+
+		if ( ! $registered ) {
 			return new WP_REST_Response(
 				array(
 					'ok'    => false,
-					'error' => 'capacity',
+					'error' => self::at_capacity() ? 'capacity' : 'registration_failed',
 				),
 				503
 			);
 		}
 
-		if ( ! in_array( $platform, self::$platforms, true ) ) {
-			$platform = 'app';
+		if ( 'web' === $platform ) {
+			self::set_web_device_cookie( $token );
 		}
 
-		// Logged-in users (cookie/nonce or app auth) get their user attached
-		// so role targeting can reach them; anonymous subscribers store 0.
-		self::register( $token, $platform, get_current_user_id() );
-
-		return new WP_REST_Response( array( 'ok' => true ), 200 );
+		return new WP_REST_Response(
+			array(
+				'ok'           => true,
+				'user_binding' => $release_owner ? 'released' : ( $user_id > 0 ? 'authenticated' : 'unchanged' ),
+			),
+			200
+		);
 	}
 
 	/**
@@ -178,16 +199,105 @@ class Bcsend_Devices {
 
 		if ( '' !== $token ) {
 			self::deregister( $token );
+			self::clear_web_device_cookie( hash( 'sha256', $token ) );
 		}
 
 		return new WP_REST_Response( array( 'ok' => true ), 200 );
 	}
 
 	/**
+	 * Browser cookie name for the current site's web-push token hash.
+	 *
+	 * @return string
+	 */
+	private static function web_device_cookie_name() {
+		return 'bcsend_push_device_' . substr( md5( home_url( '/' ) ), 0, 12 );
+	}
+
+	/**
+	 * Remember a web device hash so WordPress logout can release its owner.
+	 *
+	 * The raw FCM token is never placed in a cookie.
+	 *
+	 * @param string $token FCM token.
+	 * @return void
+	 */
+	private static function set_web_device_cookie( $token ) {
+		if ( headers_sent() ) {
+			return;
+		}
+
+		$name   = self::web_device_cookie_name();
+		$value  = hash( 'sha256', $token );
+		$path   = defined( 'COOKIEPATH' ) && COOKIEPATH ? COOKIEPATH : '/';
+		$domain = defined( 'COOKIE_DOMAIN' ) ? COOKIE_DOMAIN : '';
+
+		setcookie( $name, $value, time() + YEAR_IN_SECONDS, $path, $domain, is_ssl(), true );
+	}
+
+	/**
+	 * Clear the web-device cookie when it represents the supplied token hash.
+	 *
+	 * @param string $token_hash SHA-256 token hash.
+	 * @return void
+	 */
+	private static function clear_web_device_cookie( $token_hash = '' ) {
+		$name   = self::web_device_cookie_name();
+		$stored = isset( $_COOKIE[ $name ] ) ? sanitize_text_field( wp_unslash( $_COOKIE[ $name ] ) ) : '';
+
+		if ( '' !== $token_hash && ! hash_equals( $stored, $token_hash ) ) {
+			return;
+		}
+
+		unset( $_COOKIE[ $name ] );
+
+		if ( headers_sent() ) {
+			return;
+		}
+
+		$path   = defined( 'COOKIEPATH' ) && COOKIEPATH ? COOKIEPATH : '/';
+		$domain = defined( 'COOKIE_DOMAIN' ) ? COOKIE_DOMAIN : '';
+		setcookie( $name, '', time() - HOUR_IN_SECONDS, $path, $domain, is_ssl(), true );
+	}
+
+	/**
+	 * Release the current browser's user association on WordPress logout.
+	 *
+	 * The user condition prevents a forged cookie from changing a device that
+	 * belongs to anyone other than the account currently logging out.
+	 *
+	 * @param int $user_id WordPress user that logged out.
+	 * @return void
+	 */
+	public static function release_web_owner_on_logout( $user_id ) {
+		global $wpdb;
+
+		$name       = self::web_device_cookie_name();
+		$token_hash = isset( $_COOKIE[ $name ] ) ? sanitize_text_field( wp_unslash( $_COOKIE[ $name ] ) ) : '';
+		$user_id    = absint( $user_id );
+
+		if ( $user_id > 0 && preg_match( '/^[a-f0-9]{64}$/', $token_hash ) ) {
+			$wpdb->update(
+				self::table(),
+				array( 'user_id' => 0 ),
+				array(
+					'token_hash' => $token_hash,
+					'user_id'    => $user_id,
+				),
+				array( '%d' ),
+				array( '%s', '%d' )
+			);
+		}
+
+		self::clear_web_device_cookie();
+	}
+
+	/**
 	 * Verify an external app's registration key (timing-safe).
 	 *
 	 * The key is generated on demand and shown in Settings > Push so a custom
-	 * mobile app can register device tokens without a WordPress session.
+	 * mobile app can register anonymous device tokens without a WordPress
+	 * session. It does not prove which WordPress user owns a device.
 	 *
 	 * @param string $provided Key from the X-Bcsend-App-Key header.
 	 * @return bool
@@ -343,12 +453,13 @@ class Bcsend_Devices {
 	/**
 	 * Register or refresh a token.
 	 *
-	 * @param string $token    FCM token.
-	 * @param string $platform Platform slug.
-	 * @param int    $user_id  Owning user (0 for anonymous).
+	 * @param string $token         FCM token.
+	 * @param string $platform      Platform slug.
+	 * @param int    $user_id       Authenticated owning user (0 for anonymous).
+	 * @param bool   $release_owner Whether to explicitly clear a known owner.
 	 * @return bool
 	 */
-	public static function register( $token, $platform = 'app', $user_id = 0 ) {
+	public static function register( $token, $platform = 'app', $user_id = 0, $release_owner = false ) {
 		global $wpdb;
 
 		$token = self::sanitize_token( $token );
@@ -364,20 +475,34 @@ class Bcsend_Devices {
 		$existing_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE token_hash = %s", $hash ) );
 
 		if ( $existing_id ) {
-			$wpdb->update(
+			$update  = array(
+				'platform'     => $platform,
+				'status'       => 'active',
+				'last_seen_at' => $now,
+			);
+			$formats = array( '%s', '%s', '%s' );
+
+			// Never erase a known owner merely because Firebase refreshed the
+			// token on a logged-out page. Ownership changes only when WordPress
+			// authenticated a user, or the client explicitly reports logout.
+			if ( $user_id > 0 || $release_owner ) {
+				$update['user_id'] = $release_owner ? 0 : absint( $user_id );
+				$formats[]         = '%d';
+			}
+
+			$updated = $wpdb->update(
 				$table,
-				array(
-					'user_id'      => absint( $user_id ),
-					'platform'     => $platform,
-					'status'       => 'active',
-					'last_seen_at' => $now,
-				),
+				$update,
 				array( 'id' => (int) $existing_id ),
-				array( '%d', '%s', '%s', '%s' ),
+				$formats,
 				array( '%d' )
 			);
 
-			return true;
+			return false !== $updated;
+		}
+
+		if ( self::at_capacity() ) {
+			return false;
 		}
 
 		return (bool) $wpdb->insert(

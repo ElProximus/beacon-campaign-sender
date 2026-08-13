@@ -17,6 +17,52 @@
     margin-right: 0;
 }
 
+.bcsend-ai-composer-lock {
+    position: sticky;
+    top: 32px;
+    z-index: 110;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 16px;
+    padding: 12px 16px;
+    border: 1px solid #dba617;
+    border-radius: 6px;
+    background: #fff8e5;
+    color: #3c434a;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.bcsend-ai-composer-lock[hidden] {
+    display: none;
+}
+
+.bcsend-ai-composer-lock .dashicons {
+    color: #996800;
+}
+
+.bcsend-ai-composer-lock #bcsend-ai-composer-lock-message {
+    flex: 1;
+    font-weight: 600;
+}
+
+.bcsend-composer-wrap.is-ai-locked .bcsend-panels,
+.bcsend-composer-wrap.is-ai-locked .bcsend-composer-bottom-bar {
+    cursor: progress;
+}
+
+.bcsend-composer-wrap.is-ai-locked :disabled {
+    cursor: not-allowed;
+}
+
+@media screen and (max-width: 782px) {
+    .bcsend-ai-composer-lock {
+        top: 0;
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+}
+
 /* ============================================================
    2. Two-Panel Layout
    ============================================================ */

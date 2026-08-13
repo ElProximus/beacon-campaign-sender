@@ -215,8 +215,24 @@ class Bcsend_Push_Manager {
 			return new WP_Error( 'invalid_status', sprintf( 'Push status is "%s"; must be pending or scheduled.', $push->status ) );
 		}
 
-		// Update to processing.
-		$wpdb->update( $table, array( 'status' => 'processing' ), array( 'id' => $push_id ), array( '%s' ), array( '%d' ) );
+		// Atomically claim delivery so duplicate scheduler callbacks cannot
+		// both pass the status check and dispatch the same notification.
+		// {$table} interpolation, not %i: %i requires WP 6.2, plugin supports 5.8.
+		$claimed = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'processing'
+				WHERE id = %d AND status IN ('pending','scheduled')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				(int) $push_id
+			)
+		);
+
+		if ( false === $claimed ) {
+			return new WP_Error( 'push_claim_failed', 'Push notification delivery could not be claimed.' );
+		}
+
+		if ( 1 !== $claimed ) {
+			return new WP_Error( 'push_already_claimed', 'This push notification is already being processed or is no longer available to send.' );
+		}
 
 		$target_data  = ! empty( $push->target_data ) ? json_decode( $push->target_data, true ) : array();
 		$push_service = new Bcsend_Push_Service();
@@ -329,6 +345,7 @@ class Bcsend_Push_Manager {
 		$history_table = $wpdb->prefix . self::TABLE_HISTORY;
 		$sent          = 0;
 		$failed        = 0;
+		$ambiguous     = 0;
 
 		// Normalize tokens to usable format.
 		$normalized = array();
@@ -370,14 +387,19 @@ class Bcsend_Push_Manager {
 				'' !== $device['platform'] ? $device['platform'] : 'app'
 			);
 
-			$success       = is_array( $result ) && 'success' === $result['status'];
-			$error_message = is_array( $result ) ? $result['error_message'] : '';
-			$fcm_response  = is_array( $result ) ? $result['fcm_response'] : '';
+			$result_status = is_array( $result ) && isset( $result['status'] ) ? $result['status'] : '';
+			$success       = 'success' === $result_status;
+			$is_ambiguous  = 'ambiguous' === $result_status;
+			$error_message = is_array( $result ) && isset( $result['error_message'] ) ? $result['error_message'] : '';
+			$fcm_response  = is_array( $result ) && isset( $result['fcm_response'] ) ? $result['fcm_response'] : '';
 
 			if ( $success ) {
 				++$sent;
 			} else {
 				++$failed;
+				if ( $is_ambiguous ) {
+					++$ambiguous;
+				}
 				if ( ! is_array( $result ) && is_wp_error( $result ) ) {
 					$error_message = $result->get_error_message();
 				}
@@ -402,7 +424,7 @@ class Bcsend_Push_Manager {
 
 		Bcsend_Logger::log(
 			'push',
-			sprintf( 'Push %d batch %d: %d sent, %d failed', $push_id, $batch_number, $sent, $failed )
+			sprintf( 'Push %d batch %d: %d sent, %d failed (%d outcome uncertain)', $push_id, $batch_number, $sent, $failed, $ambiguous )
 		);
 
 		// Check if this was the last batch.

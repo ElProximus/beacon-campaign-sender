@@ -65,12 +65,12 @@ class Bcsend_Deactivator {
 		}
 
 		// Clear wp_cron fallback events.
-		wp_clear_scheduled_hook( 'bcsend_campaign' );
+		wp_unschedule_hook( 'bcsend_campaign' ); // Scheduled with array( $campaign_id ); the no-arg clear matches nothing.
 		wp_clear_scheduled_hook( 'bcsend_push_batch' );
 		wp_clear_scheduled_hook( 'bcsend_cleanup_logs' );
 		wp_clear_scheduled_hook( 'bcsend_sync_segments' );
 		wp_clear_scheduled_hook( Bcsend_Subscriber_Ingest::RETRY_HOOK );
-		wp_clear_scheduled_hook( 'bcsend_standalone_push' );
+		wp_unschedule_hook( 'bcsend_standalone_push' ); // Scheduled with array( $push_id ); the no-arg clear matches nothing.
 		wp_clear_scheduled_hook( 'bcsend_standalone_push_batch' );
 		wp_unschedule_hook( 'bcsend_run_ai_job' ); // Same: single events are scheduled with the job ID argument.
 		wp_unschedule_hook( 'bcsend_recover_openai_job' ); // Events carry args; wp_clear_scheduled_hook() with no args matches nothing.

@@ -5,7 +5,9 @@ Downloaded unmodified from Google's official CDN:
 - https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js
 - https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js
 
-License: Apache License 2.0 (Copyright Google LLC) - see
+License: Apache License 2.0 (Copyright Google LLC). A complete copy of
+the license is bundled alongside these files as LICENSE in this
+directory; the upstream project's license is at
 https://github.com/firebase/firebase-js-sdk/blob/master/LICENSE
 
 Bundled locally so the plugin loads no executable code from external

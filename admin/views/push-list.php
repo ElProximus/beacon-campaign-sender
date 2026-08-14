@@ -67,7 +67,7 @@ $status_options = array( 'all', 'pending', 'scheduled', 'sending', 'sent', 'fail
 			<button type="button" class="button" id="bcsend-import-tokens-btn"><?php esc_html_e( 'Import tokens', 'beacon-campaign-sender' ); ?></button>
 			<span class="bcsend-inline-status" id="bcsend-import-tokens-status"></span>
 		</p>
-		<?php $bcsend_device_stats = Bcsend_Devices::stats(); ?>
+		<?php $bcsend_device_stats = Bcsend_Devices::counts(); ?>
 		<p style="margin-bottom: 0;">
 			<span id="bcsend-device-stats">
 				<?php

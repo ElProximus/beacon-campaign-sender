@@ -26,7 +26,7 @@ Beacon Campaign Sender brings campaign management that usually takes three or fo
 - **Brand voice control** — keep every AI draft sounding like you.
 - **Newsletter signup forms** — drop a form on any page with a shortcode, or build your own with custom HTML.
 - **WordPress email routing (optional)** — route all of your site's `wp_mail()` traffic through Brevo, replacing a separate SMTP plugin.
-- **Privacy-friendly** — subscriber, log, AI-job, and push-device data is stored locally (AI job records auto-delete after 30 days) and integrates with WordPress personal-data exporters and erasers.
+- **Privacy-friendly** — subscriber, email-log, AI-job, and push-device data is stored locally on your own site. Subscriber, email-log, and push-device records integrate with WordPress personal-data exporters and erasers; AI-job records expire automatically within 30 days.
 
 One dashboard, every channel, no glue code — so you can spend your time on the message, not the plumbing.
 
@@ -174,9 +174,27 @@ One-click integration with the BuddyBoss App, no configuration needed.
 
 == Privacy ==
 
-Beacon Campaign Sender stores subscriber sign-up records and email logs locally on your site. Depending on the enabled features, stored data can include email addresses, names, consent text, IP addresses, user agents, referrer metadata, message content, headers, attachments metadata, and delivery status information.
+Beacon Campaign Sender stores the following data locally in your WordPress database:
 
-The plugin integrates with WordPress personal data exporters and erasers for locally stored subscriber and email log records.
+- **Subscriber records** — email address, name, consent text, source, IP address, browser user agent, and referrer metadata for newsletter sign-ups.
+- **Email logs** — recipient addresses, subject, message body, headers, attachment metadata, sender details, delivery status, and error details for transactional email troubleshooting.
+- **Push-device tokens** — one token per subscribed browser or app, with its platform, subscription date, and (when the subscriber was logged in) the owning WordPress account. Tokens are deleted when a subscriber unsubscribes, on logout release, or automatically once Firebase reports them dead.
+- **AI generation jobs** — the prompt, selected campaign context, generated result, and job status for each AI generation. These records are retained for a maximum of 30 days and then deleted automatically.
+
+WordPress personal-data export and erasure requests cover the subscriber, email-log, and push-device records. AI-job records are not included in the exporters/erasers; they expire automatically on the 30-day schedule instead.
+
+Data sent to external services (Brevo, OpenAI, Anthropic, Firebase, Zernio) is described service-by-service in the Uses External Services section above.
+
+== Third-Party Libraries ==
+
+= Firebase JavaScript SDK 10.12.2 =
+
+Beacon Campaign Sender bundles the Firebase JavaScript SDK (compat builds) for web push notifications, so no executable code is loaded from external servers at runtime.
+
+- Files: `assets/js/vendor/firebase/firebase-app-compat.js`, `assets/js/vendor/firebase/firebase-messaging-compat.js`
+- Official source: https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js and https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js
+- Project: https://github.com/firebase/firebase-js-sdk
+- License: Apache License 2.0 (Copyright Google LLC); a complete copy is bundled at `assets/js/vendor/firebase/LICENSE`
 
 == Changelog ==
 

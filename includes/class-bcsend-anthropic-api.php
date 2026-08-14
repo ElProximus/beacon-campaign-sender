@@ -283,9 +283,13 @@ class Bcsend_Anthropic_API {
 				);
 			}
 
-			// HTTP 529 (overloaded) and 500 (api_error) are documented by
-			// Anthropic as retry-safe rejections issued before generation
-			// starts - not billed, so a delayed retry cannot duplicate work.
+			// HTTP 529 (overloaded) and 500 (api_error) are provider-
+			// documented transient failures Anthropic recommends retrying.
+			// Retrying is a deliberate reliability tradeoff: a rare
+			// accepted-then-errored request or intermediary failure could
+			// still duplicate generation and billing. Gateway/timeout
+			// ambiguity (408/502/503/504/524, post-connect transport loss)
+			// keeps the conservative one-POST handling below.
 			if ( in_array( $code, array( 500, 529 ), true ) ) {
 				$last_error = new WP_Error(
 					'anthropic_api_error',

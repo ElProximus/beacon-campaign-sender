@@ -445,7 +445,7 @@ class Bcsend_Devices {
 				/* translators: %d: number of deleted device rows. */
 				'message' => sprintf( __( 'Removed %d stale devices.', 'beacon-campaign-sender' ), $deleted ),
 				'deleted' => $deleted,
-				'stats'   => self::stats(),
+				'stats'   => self::counts(),
 			)
 		);
 	}

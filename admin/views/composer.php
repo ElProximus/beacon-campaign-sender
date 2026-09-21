@@ -120,7 +120,7 @@ if ( ! empty( $social_posts ) ) {
 	<div class="bcsend-panels">
 
 		<!-- Left Panel: Email Preview + HTML Editor (split view) -->
-		<div class="bcsend-panel-left" id="bcsend-email-panel" style="<?php echo ( $is_editing && isset( $campaign->send_email ) && ! $campaign->send_email ) ? 'display:none;' : ''; ?>">
+		<div class="bcsend-panel-left<?php echo ( $is_editing && isset( $campaign->send_email ) && ! $campaign->send_email ) ? ' is-email-off' : ''; ?>" id="bcsend-email-panel">
 			<div class="bcsend-preview-container">
 				<div class="bcsend-preview-header">
 					<span><?php esc_html_e( 'Email Preview', 'beacon-campaign-sender' ); ?></span>
@@ -154,6 +154,13 @@ if ( ! empty( $social_posts ) ) {
 				</div>
 				<textarea id="bcsend-html-editor"
 							class="bcsend-code-editor"><?php echo $is_editing ? esc_textarea( $campaign->html_content ) : esc_textarea( $loaded_template_html ); ?></textarea>
+			</div>
+
+			<?php // Shown over the paused preview when Include Email is unchecked; the layout never shifts. ?>
+			<div class="bcsend-email-off-card" id="bcsend-email-off-card" role="status">
+				<h3><?php esc_html_e( 'Email is off for this campaign', 'beacon-campaign-sender' ); ?></h3>
+				<p><?php esc_html_e( 'The preview and HTML editor are paused. Nothing shown here will be sent.', 'beacon-campaign-sender' ); ?></p>
+				<button type="button" class="button button-primary" id="bcsend-email-off-restore"><?php esc_html_e( 'Turn email back on', 'beacon-campaign-sender' ); ?></button>
 			</div>
 		</div>
 

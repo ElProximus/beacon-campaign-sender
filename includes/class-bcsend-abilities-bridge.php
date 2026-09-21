@@ -284,6 +284,36 @@ class Bcsend_Abilities_Bridge {
 					'max_per_hour' => 100,
 				),
 			),
+			'beacon-campaign-sender/get-template'         => array(
+				'label'                 => __( 'Get Template', 'beacon-campaign-sender' ),
+				'settings_label'        => __( 'Get Template', 'beacon-campaign-sender' ),
+				'connector_description' => 'Retrieve one email template with its full HTML.',
+				'risk_level'            => 'low',
+				'permissions'           => array(
+					'max_per_day'  => 500,
+					'max_per_hour' => 100,
+				),
+			),
+			'beacon-campaign-sender/create-template'      => array(
+				'label'                 => __( 'Create Template', 'beacon-campaign-sender' ),
+				'settings_label'        => __( 'Create Template', 'beacon-campaign-sender' ),
+				'connector_description' => 'Create a new reusable email template from HTML.',
+				'risk_level'            => 'medium',
+				'permissions'           => array(
+					'max_per_day'  => 50,
+					'max_per_hour' => 20,
+				),
+			),
+			'beacon-campaign-sender/update-template'      => array(
+				'label'                 => __( 'Update Template', 'beacon-campaign-sender' ),
+				'settings_label'        => __( 'Update Template', 'beacon-campaign-sender' ),
+				'connector_description' => 'Rename an email template, replace its HTML, or make it the default.',
+				'risk_level'            => 'medium',
+				'permissions'           => array(
+					'max_per_day'  => 100,
+					'max_per_hour' => 30,
+				),
+			),
 			'beacon-campaign-sender/list-brevo-lists'     => array(
 				'label'                 => __( 'List Brevo Lists', 'beacon-campaign-sender' ),
 				'settings_label'        => __( 'List Brevo Lists', 'beacon-campaign-sender' ),

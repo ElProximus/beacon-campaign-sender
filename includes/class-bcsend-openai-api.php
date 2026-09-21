@@ -57,7 +57,7 @@ class Bcsend_OpenAI_API {
 	}
 
 	private function request( $input, $instructions = '', $max_tokens = self::MAX_OUTPUT_TOKENS ) {
-		// Models with catalog budgets (the GPT-5.6 family) use the per-task
+		// Models with catalog budgets (GPT-5.6 and GPT-6) use the per-task
 		// output budget - reasoning tokens draw from max_output_tokens, so
 		// the small legacy caps (512 push / 1024 social) would truncate them.
 		// Legacy models keep the caller-provided cap unchanged.
@@ -71,6 +71,13 @@ class Bcsend_OpenAI_API {
 			'input'             => $input,
 			'max_output_tokens' => $max_tokens,
 		);
+
+		// Models with a catalog effort map (GPT-6 Astra) get an explicit
+		// reasoning effort so behaviour does not depend on OpenAI's default.
+		$reasoning_effort = Bcsend_Model_Catalog::effort( $this->model, Bcsend_AI_Service::get_task_context() );
+		if ( in_array( $reasoning_effort, array( 'low', 'medium', 'high', 'xhigh', 'max' ), true ) ) {
+			$body['reasoning'] = array( 'effort' => $reasoning_effort );
+		}
 
 		if ( ! empty( $instructions ) ) {
 			$body['instructions'] = $instructions;
@@ -179,6 +186,27 @@ class Bcsend_OpenAI_API {
 					do_action( 'bcsend_ai_provider_response_submitted', $decoded_body['id'] );
 
 					return $this->poll_background_response( $decoded_body['id'] );
+				}
+
+				// Only a terminal "completed" response carries trustworthy
+				// output. An "incomplete" response (for example, the output
+				// budget ran out mid-answer) can still contain partial text
+				// and must never be accepted as a finished generation.
+				if ( '' !== $status && 'completed' !== $status ) {
+					$reason = isset( $decoded_body['incomplete_details']['reason'] ) ? (string) $decoded_body['incomplete_details']['reason'] : $status;
+
+					return new WP_Error(
+						'openai_incomplete',
+						sprintf(
+							/* translators: %s: provider status or incomplete reason. */
+							__( 'OpenAI did not finish the response (%s). Try again, or shorten the request.', 'beacon-campaign-sender' ),
+							$reason
+						),
+						array(
+							'provider_status' => $status,
+							'reason'          => $reason,
+						)
+					);
 				}
 
 				$text = $this->extract_output_text( $decoded_body );

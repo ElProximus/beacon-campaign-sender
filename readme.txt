@@ -4,7 +4,7 @@ Tags: email, newsletter, push notifications, ai, marketing
 Requires at least: 5.8
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -197,6 +197,15 @@ Beacon Campaign Sender bundles the Firebase JavaScript SDK (compat builds) for w
 - License: Apache License 2.0 (Copyright Google LLC); a complete copy is bundled at `assets/js/vendor/firebase/LICENSE`
 
 == Changelog ==
+
+= 1.1.1 =
+* New: Claude Fable 5.1 (Anthropic's most capable model) with the same one-time Opus 5 fallback after a safety refusal; Fable 5 moves to Legacy
+* New: GPT-6 Astra (OpenAI's most capable model) with background-mode generation; GPT-5.6 Terra stays the recommended default
+* Fix: AI generation jobs died instantly on LiteSpeed hosts (Hostinger) - the server kills a request the moment its caller disconnects, so background workers never reached the AI provider; the worker now finishes its HTTP response first (litespeed_finish_request / fastcgi_finish_request) and keeps running
+* Fix: the campaign controls column no longer pins to the top when it is taller than the window, which trapped its lower fields under the Save/Approve bar; it pins only when it fits, and focused fields scroll clear of the bar
+* Improved: the email preview now grows to show the entire email - no inner scrollbar - and re-fits when images load, the content changes, or the window resizes
+* Improved: unchecking Include Email no longer hides the preview panel and shifts the whole composer; the preview stays in place, paused and dimmed, with a card that turns email back on in one click
+* New: three template abilities for connected AI clients - get-template (full HTML), create-template, and update-template (rename, replace HTML, set as default); list-templates now reports which template is the default
 
 = 1.1.0 =
 **AI generation**

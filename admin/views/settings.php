@@ -933,7 +933,7 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 								</optgroup>
 							<?php endforeach; ?>
 						</select>
-						<p class="description"><?php esc_html_e( 'GPT-5.6 models run generation on OpenAI\'s servers in the background, which is more reliable on shared hosting.', 'beacon-campaign-sender' ); ?></p>
+						<p class="description"><?php esc_html_e( 'GPT-5.6 and GPT-6 models run generation on OpenAI\'s servers in the background, which is more reliable on shared hosting.', 'beacon-campaign-sender' ); ?></p>
 					</td>
 				</tr>
 			</table>

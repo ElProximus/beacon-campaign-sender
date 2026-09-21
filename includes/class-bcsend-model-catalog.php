@@ -72,10 +72,28 @@ class Bcsend_Model_Catalog {
 					'social'  => 8192,
 				),
 			),
-			'claude-fable-5'            => array(
-				'label'       => __( 'Claude Fable 5 (Maximum Capability — premium pricing, slower)', 'beacon-campaign-sender' ),
+			'claude-fable-5-1'          => array(
+				'label'       => __( 'Claude Fable 5.1 (Maximum Capability — premium pricing, slower)', 'beacon-campaign-sender' ),
 				'provider'    => 'anthropic',
 				'group'       => 'premium',
+				'thinking'    => 'always',
+				'effort'      => array(
+					'campaign' => 'high',
+					'html'     => 'high',
+					'push'     => 'medium',
+					'social'   => 'medium',
+				),
+				'max_tokens'  => array(
+					'default' => 16000,
+					'push'    => 8192,
+					'social'  => 8192,
+				),
+				'fallback_to' => 'claude-opus-5',
+			),
+			'claude-fable-5'            => array(
+				'label'       => __( 'Claude Fable 5 (Legacy — premium pricing, slower)', 'beacon-campaign-sender' ),
+				'provider'    => 'anthropic',
+				'group'       => 'legacy',
 				'thinking'    => 'always',
 				'effort'      => array(
 					'campaign' => 'high',
@@ -133,6 +151,26 @@ class Bcsend_Model_Catalog {
 					'social'  => 8192,
 				),
 			),
+			'gpt-6-astra'               => array(
+				'label'      => __( 'GPT-6 Astra (Maximum Capability — premium pricing, slower)', 'beacon-campaign-sender' ),
+				'provider'   => 'openai',
+				'group'      => 'premium',
+				'background' => true,
+				// OpenAI recommends at least 25,000 output tokens for Astra;
+				// reasoning draws from the same allowance. Short tasks run at
+				// low effort so 8,192 stays safe.
+				'effort'     => array(
+					'campaign' => 'medium',
+					'html'     => 'medium',
+					'push'     => 'low',
+					'social'   => 'low',
+				),
+				'max_tokens' => array(
+					'default' => 25000,
+					'push'    => 8192,
+					'social'  => 8192,
+				),
+			),
 			'gpt-5.6-sol'               => array(
 				'label'      => __( 'GPT-5.6 Sol (Higher Quality)', 'beacon-campaign-sender' ),
 				'provider'   => 'openai',
@@ -156,22 +194,22 @@ class Bcsend_Model_Catalog {
 				),
 			),
 			'gpt-5.5'                   => array(
-				'label'    => __( 'GPT-5.5 (Legacy)', 'beacon-campaign-sender' ),
+				'label'    => __( 'GPT-5.5 (Previous generation)', 'beacon-campaign-sender' ),
 				'provider' => 'openai',
 				'group'    => 'legacy',
 			),
 			'gpt-5.4'                   => array(
-				'label'    => __( 'GPT-5.4 (Legacy)', 'beacon-campaign-sender' ),
+				'label'    => __( 'GPT-5.4 (Previous generation)', 'beacon-campaign-sender' ),
 				'provider' => 'openai',
 				'group'    => 'legacy',
 			),
 			'gpt-5.2'                   => array(
-				'label'    => __( 'GPT-5.2 (Legacy)', 'beacon-campaign-sender' ),
+				'label'    => __( 'GPT-5.2 (Previous generation)', 'beacon-campaign-sender' ),
 				'provider' => 'openai',
 				'group'    => 'legacy',
 			),
 			'gpt-5-mini'                => array(
-				'label'    => __( 'GPT-5 Mini (Legacy)', 'beacon-campaign-sender' ),
+				'label'    => __( 'GPT-5 Mini (Previous generation)', 'beacon-campaign-sender' ),
 				'provider' => 'openai',
 				'group'    => 'legacy',
 			),

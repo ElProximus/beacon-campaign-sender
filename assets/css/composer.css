@@ -96,7 +96,6 @@
         flex: none;
         width: 100%;
         position: static;
-        max-height: 70vh;
     }
 
     .bcsend-panel-right {
@@ -109,6 +108,53 @@
 /* ============================================================
    3. Email Preview (top half of left panel)
    ============================================================ */
+
+/* Email off: keep the panel in place (no layout shift), pause it visually,
+   and show a card explaining why with a one-click way back. */
+.bcsend-panel-left {
+    position: relative;
+}
+
+.bcsend-email-off-card {
+    display: none;
+}
+
+.bcsend-panel-left.is-email-off .bcsend-preview-container {
+    opacity: 0.5;
+    filter: grayscale(1);
+    pointer-events: none;
+    user-select: none;
+}
+
+.bcsend-panel-left.is-email-off .bcsend-code-container {
+    display: none;
+}
+
+.bcsend-panel-left.is-email-off .bcsend-email-off-card {
+    display: block;
+    position: absolute;
+    top: 110px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    max-width: 420px;
+    padding: 22px 28px;
+    text-align: center;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 8px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+}
+
+.bcsend-email-off-card h3 {
+    margin: 0 0 6px;
+    font-size: 16px;
+}
+
+.bcsend-email-off-card p {
+    margin: 0 0 14px;
+    color: #50575e;
+}
 
 .bcsend-preview-container {
     display: flex;
@@ -138,6 +184,7 @@
     border: none;
     display: block;
     background: #fff;
+    overflow: hidden; /* height tracks the content; the page scrolls, not the frame */
 }
 
 /* ============================================================
@@ -1255,9 +1302,23 @@
     margin-bottom: 18px;
 }
 
+/* The controls column only pins to the top when it fits on screen. A column
+   taller than the viewport used to stick anyway, trapping its lower fields
+   under the bottom bar until the (now full-height) preview had scrolled past.
+   The composer script adds .is-sticky when the column fits. */
 .bcsend-panel-right {
+    position: static;
+}
+
+.bcsend-panel-right.is-sticky {
     position: sticky;
     top: 48px;
+}
+
+/* Keep a focused field clear of the sticky bottom bar when the browser
+   scrolls it into view (tabbing through fields, validation jumps). */
+html {
+    scroll-padding-bottom: 80px;
 }
 
 .bcsend-panel-right > .bcsend-field-group,
@@ -1287,6 +1348,25 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    /* The card has no top padding, so the header must not be pulled upward
+       like the field-group headings are (it was clipping its own title). */
+    margin-top: 0;
+}
+
+/* Inside the card the 18px card padding already provides the gutter; the
+   tab panels and selected-content rows must not add their own inset so the
+   search box, results and selections line up with the tabs and with the
+   fields in the other cards. */
+.bcsend-content-library .bcsend-cl-panel {
+    padding: 12px 0 0;
+}
+
+.bcsend-content-library .bcsend-cl-panel > :last-child {
+    margin-bottom: 0;
+}
+
+.bcsend-content-library .bcsend-cl-all-selected {
+    padding: 8px 0;
 }
 
 .bcsend-generate-row {

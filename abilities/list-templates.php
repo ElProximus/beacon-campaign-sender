@@ -24,7 +24,7 @@ add_action(
 			'beacon-campaign-sender/list-templates',
 			array(
 				'label'               => __( 'List Templates', 'beacon-campaign-sender' ),
-				'description'         => 'List available email templates with name, creation date, and a preview snippet.',
+				'description'         => 'List available email templates with name, creation date, a preview snippet, and which one is the default. Use get-template to read a template\'s full HTML.',
 				'category'            => 'beacon-campaign-sender',
 
 				'input_schema'        => array(
@@ -53,6 +53,10 @@ add_action(
 							'preview_snippet' => array(
 								'type'        => 'string',
 								'description' => 'First 200 characters of plain text content.',
+							),
+							'is_default'      => array(
+								'type'        => 'boolean',
+								'description' => 'Whether this template is preloaded for new campaigns.',
 							),
 						),
 					),
@@ -94,7 +98,8 @@ function bcsend_ability_list_templates( $input = array() ) {
 		return array();
 	}
 
-	$result = array();
+	$result     = array();
+	$default_id = (int) get_option( 'bcsend_default_template_id', 0 );
 
 	foreach ( $templates as $template ) {
 		$plain_text = isset( $template->plain_text ) ? $template->plain_text : '';
@@ -105,6 +110,7 @@ function bcsend_ability_list_templates( $input = array() ) {
 			'name'            => $template->name,
 			'created_at'      => $template->created_at,
 			'preview_snippet' => $preview,
+			'is_default'      => ( (int) $template->id === $default_id ),
 		);
 	}
 

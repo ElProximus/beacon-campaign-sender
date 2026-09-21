@@ -1028,9 +1028,34 @@
             $('#bcsend-send-email').on('change', function() {
                 var enabled = $(this).is(':checked');
                 $('#bcsend-email-fields').toggle(enabled);
-                $('#bcsend-email-panel').toggle(enabled);
+                // The preview panel stays put so the layout never jumps; it is
+                // paused (dimmed, non-interactive) with an explanatory card.
+                $('#bcsend-email-panel').toggleClass('is-email-off', !enabled);
                 $('#bcsend-send-test-email, #bcsend-save-as-template').toggle(enabled);
             }).trigger('change');
+
+            $('#bcsend-email-off-restore').on('click', function() {
+                $('#bcsend-send-email').prop('checked', true).trigger('change');
+            });
+
+            // Full-height email preview (no inner scrollbar).
+            var fitTimer = null;
+            $('#bcsend-email-preview').on('load', function() { self.fitEmailPreview(); });
+            $(window).on('resize.bcsendPreviewFit', function() {
+                clearTimeout(fitTimer);
+                fitTimer = setTimeout(function() {
+                    self.fitEmailPreview();
+                    self.updateRightPanelSticky();
+                }, 150);
+            });
+            self.fitEmailPreview();
+
+            // Pin the controls column only while it fits on screen.
+            var rightPanel = document.querySelector('.bcsend-panel-right');
+            if (rightPanel && window.ResizeObserver) {
+                new ResizeObserver(function() { self.updateRightPanelSticky(); }).observe(rightPanel);
+            }
+            self.updateRightPanelSticky();
 
             // Push toggle.
             $('#bcsend-send-push').on('change', function() {
@@ -1263,20 +1288,66 @@
         updateEmailPreview: function(html) {
             var $iframe = $('#bcsend-email-preview');
             if ($iframe.length) {
+                // The load handler bound in bindFieldEvents() sizes the frame.
                 $iframe[0].srcdoc = html;
+            }
+        },
 
-                // Auto-resize iframe to content height once loaded.
-                $iframe.off('load.bcsend').on('load.bcsend', function() {
-                    try {
-                        var doc = this.contentDocument || this.contentWindow.document;
-                        var height = doc.documentElement.scrollHeight || doc.body.scrollHeight;
-                        if (height > 100) {
-                            this.style.height = height + 'px';
-                        }
-                    } catch (e) {
-                        // Cross-origin or empty — keep min-height.
+        // The controls column pins to the top only when the whole column fits
+        // between the admin bar and the sticky bottom bar; otherwise it must
+        // scroll with the page so every field stays reachable.
+        updateRightPanelSticky: function() {
+            var $panel = $('.bcsend-panel-right');
+            if (!$panel.length) { return; }
+            var barHeight = $('.bcsend-composer-bottom-bar').outerHeight() || 0;
+            var available = window.innerHeight - 48 - barHeight - 16;
+            $panel.toggleClass('is-sticky', $panel.outerHeight() <= available);
+        },
+
+        // Size the preview frame to its full content so the whole email is
+        // visible without an inner scrollbar. Re-run whenever the content
+        // changes: on load, when images inside finish loading, when the
+        // document body resizes, and on window resize.
+        fitEmailPreview: function() {
+            var self   = this;
+            var iframe = document.getElementById('bcsend-email-preview');
+            if (!iframe) { return; }
+
+            try {
+                var doc  = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+                var root = doc && doc.documentElement;
+                var body = doc && doc.body;
+                if (!root) { return; }
+
+                if (!root.bcsendFitBound) {
+                    root.bcsendFitBound = true;
+                    // Percentage heights would track the frame and ratchet it
+                    // upward forever; content-driven heights only.
+                    root.style.height = 'auto';
+                    root.style.overflow = 'hidden';
+                    if (body) {
+                        body.style.height = 'auto';
+                        body.style.overflow = 'hidden';
                     }
-                });
+                    $(doc).find('img').each(function() {
+                        if (!this.complete) {
+                            $(this).one('load error', function() { self.fitEmailPreview(); });
+                        }
+                    });
+                    if (window.ResizeObserver && body) {
+                        new ResizeObserver(function() { self.fitEmailPreview(); }).observe(body);
+                    }
+                }
+
+                var height = Math.max(
+                    root.scrollHeight, root.offsetHeight,
+                    body ? body.scrollHeight : 0, body ? body.offsetHeight : 0
+                );
+                if (height > 0 && Math.abs(height - iframe.clientHeight) > 2) {
+                    iframe.style.height = height + 'px';
+                }
+            } catch (e) {
+                // Unreadable document - keep the CSS min-height.
             }
         },
 

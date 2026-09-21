@@ -162,9 +162,46 @@ class Bcsend_Ai_Job_Runner {
 			wp_die( '', '', array( 'response' => 403 ) );
 		}
 
+		self::detach_from_client();
 		$this->run( $job );
-		wp_die( '', '', array( 'response' => 200 ) );
+		exit;
 	}
+
+	/**
+	 * Finish the HTTP response now and keep running in the background.
+	 *
+	 * The kick is a non-blocking loopback whose caller disconnects at once.
+	 * LiteSpeed hosts (Hostinger among them) terminate PHP the moment the
+	 * client goes away, ignoring ignore_user_abort(), so the worker must end
+	 * the response itself before doing any real work. On hosts without a
+	 * finish-request call this is a harmless early flush.
+	 *
+	 * @since 1.1.1
+	 */
+	private static function detach_from_client() {
+		ignore_user_abort( true );
+
+		if ( ! headers_sent() ) {
+			status_header( 200 );
+			nocache_headers();
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			header( 'Content-Length: 2' );
+			header( 'Connection: close' );
+		}
+		echo 'ok';
+
+		while ( ob_get_level() > 0 ) {
+			ob_end_flush();
+		}
+		flush();
+
+		if ( function_exists( 'litespeed_finish_request' ) ) {
+			litespeed_finish_request();
+		} elseif ( function_exists( 'fastcgi_finish_request' ) ) {
+			fastcgi_finish_request();
+		}
+	}
+
 
 	/**
 	 * Scheduler entry point (Action Scheduler or WP-Cron backstop).

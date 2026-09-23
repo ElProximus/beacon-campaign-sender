@@ -48,6 +48,17 @@ $zernio_webhook_diagnostics = get_option( 'bcsend_zernio_webhook_diagnostics', a
 
 	<?php settings_errors( 'bcsend_settings' ); ?>
 
+	<?php $bcsend_unreadable_secrets = Bcsend_Settings::get_unreadable_secret_labels(); ?>
+	<?php if ( ! empty( $bcsend_unreadable_secrets ) ) : ?>
+		<div class="notice notice-warning bcsend-unreadable-secrets">
+			<p>
+				<strong><?php esc_html_e( 'Some saved keys can no longer be read.', 'beacon-campaign-sender' ); ?></strong>
+				<?php esc_html_e( 'This happens when the site\'s WordPress security keys (AUTH_KEY) change or the site moves to a new host. Enter these again below and save; Beacon cannot use them until you do:', 'beacon-campaign-sender' ); ?>
+				<?php echo esc_html( implode( ', ', $bcsend_unreadable_secrets ) ); ?>
+			</p>
+		</div>
+	<?php endif; ?>
+
 	<nav class="nav-tab-wrapper bcsend-nav-tab-wrapper">
 		<?php foreach ( $settings_tabs as $tab_slug => $tab_label ) : ?>
 			<a href="

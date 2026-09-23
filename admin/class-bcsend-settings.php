@@ -379,7 +379,11 @@ class Bcsend_Settings {
 	 * @return string
 	 */
 	private function sanitize_secret_field( $input, $existing, $field, $type = 'text' ) {
-		$has_existing = ! empty( $existing[ $field ] );
+		// A stored secret that can no longer be decrypted (AUTH_KEY changed,
+		// site moved) counts as absent: the settings page cannot show its
+		// "Replace" checkbox, so keeping it would silently discard the new
+		// value the user just typed.
+		$has_existing = ! empty( $existing[ $field ] ) && ! self::is_unreadable_secret( $existing[ $field ] );
 		$replace_key  = 'replace_' . $field;
 		$should_save  = ! empty( $input[ $replace_key ] ) || ! $has_existing;
 
@@ -395,6 +399,51 @@ class Bcsend_Settings {
 		}
 
 		return $value;
+	}
+
+	/**
+	 * Whether a stored secret is encrypted but can no longer be decrypted.
+	 *
+	 * @since 1.1.2
+	 *
+	 * @param mixed $value Stored value.
+	 * @return bool
+	 */
+	private static function is_unreadable_secret( $value ) {
+		return is_string( $value )
+			&& '' !== $value
+			&& Bcsend_Encryption::is_encrypted( $value )
+			&& '' === (string) Bcsend_Encryption::decrypt( $value );
+	}
+
+	/**
+	 * Human labels of saved secrets that can no longer be decrypted.
+	 *
+	 * Shown on the Settings page so the user knows exactly which keys to
+	 * enter again after a WordPress security-key change or site move.
+	 *
+	 * @since 1.1.2
+	 *
+	 * @return string[] Field key => label.
+	 */
+	public static function get_unreadable_secret_labels() {
+		$labels = array(
+			'brevo_api_key'                 => __( 'Brevo API key', 'beacon-campaign-sender' ),
+			'anthropic_api_key'             => __( 'Anthropic API key', 'beacon-campaign-sender' ),
+			'openai_api_key'                => __( 'OpenAI API key', 'beacon-campaign-sender' ),
+			'firebase_service_account_json' => __( 'Firebase service account JSON', 'beacon-campaign-sender' ),
+			'zernio_api_key'                => __( 'Zernio API key', 'beacon-campaign-sender' ),
+			'zernio_webhook_secret'         => __( 'Zernio webhook secret', 'beacon-campaign-sender' ),
+		);
+		$stored = get_option( self::OPTION_NAME, array() );
+		$stored = is_array( $stored ) ? $stored : array();
+		$found  = array();
+		foreach ( self::$encrypted_fields as $field ) {
+			if ( isset( $stored[ $field ] ) && self::is_unreadable_secret( $stored[ $field ] ) ) {
+				$found[ $field ] = isset( $labels[ $field ] ) ? $labels[ $field ] : $field;
+			}
+		}
+		return $found;
 	}
 
 	/**

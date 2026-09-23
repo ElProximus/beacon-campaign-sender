@@ -4,7 +4,7 @@ Tags: email, newsletter, push notifications, ai, marketing
 Requires at least: 5.8
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -197,6 +197,10 @@ Beacon Campaign Sender bundles the Firebase JavaScript SDK (compat builds) for w
 - License: Apache License 2.0 (Copyright Google LLC); a complete copy is bundled at `assets/js/vendor/firebase/LICENSE`
 
 == Changelog ==
+
+= 1.1.2 =
+* Fix: after the site's WordPress security keys (AUTH_KEY) changed or the site moved host, saved API keys could no longer be read - and the Settings page then silently discarded any new key you typed, because it hid the "Replace saved key" checkbox while still keeping the unreadable old value. A key that can no longer be read is now treated as missing, so entering it again just works
+* New: Settings shows a clear notice naming exactly which saved keys (Brevo, Anthropic, OpenAI, Firebase, Zernio) can no longer be read and need entering again
 
 = 1.1.1 =
 * New: Claude Fable 5.1 (Anthropic's most capable model) with the same one-time Opus 5 fallback after a safety refusal; Fable 5 moves to Legacy
